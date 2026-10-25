@@ -15,5 +15,17 @@
                 IsHitTestVisible="False">
             <TextBlock x:Name="LabelText" FontSize="13" Foreground="{DynamicResource MenuFg}"/>
         </Border>
+        <!-- The icon being dragged; a popup so it can leave the dock window. -->
+        <Popup x:Name="Ghost" AllowsTransparency="True" Placement="Relative" PlacementTarget="{Binding ElementName=Root}"
+               IsHitTestVisible="False">
+            <StackPanel x:Name="GhostPanel">
+                <Border x:Name="RemoveLabel" HorizontalAlignment="Center" Margin="0,0,0,8" CornerRadius="6" Padding="10,3"
+                        Visibility="Collapsed" Background="{DynamicResource MenuBg}"
+                        BorderBrush="{DynamicResource MenuBorder}" BorderThickness="1">
+                    <TextBlock Text="제거" FontSize="13" Foreground="{DynamicResource MenuFg}"/>
+                </Border>
+                <Image x:Name="GhostImg" RenderOptions.BitmapScalingMode="HighQuality"/>
+            </StackPanel>
+        </Popup>
     </Canvas>
 </Window>

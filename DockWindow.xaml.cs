@@ -30,6 +30,7 @@ public partial class DockWindow : Window
         public bool Pinned, Separator, Trash;
         public List<IntPtr> Windows = new();
         public double Size, Target;
+        public double ShiftX, ShiftY; // drawn offset from the laid-out spot, eased to 0 so moves slide
         public Image? Img;
         public Ellipse? Dot;
         public Rectangle? Line;
@@ -46,6 +47,12 @@ public partial class DockWindow : Window
     double anchorX = double.NaN; // the dock point under this x stays put while icons grow or shrink
     double? dragStartY;          // screen y where a separator drag started
     double dragStartSize;
+    Slot? pressed, dragged;      // icon under the left button; set as dragged once it moves past the drag threshold
+    Point pressAt, grab;         // press point in Root, and in the icon
+    Point ghostAt;               // dragged icon's top-left in Root
+    int homeIndex;
+    bool removing;               // a pinned icon dragged off the dock: drop removes it, its gap closes
+    double leftShift;
     bool animating;
 
     static DockWindow()
@@ -54,6 +61,12 @@ public partial class DockWindow : Window
             && Magnify(40, 48, 84, 160) > Magnify(80, 48, 84, 160) && Magnify(80, 48, 84, 160) > 48
             && Magnify(0, 48, 48, 160) == 48,
             "magnification must peak under the pointer, fall off to the base size, and stay flat when off");
+        var pinned = new[] { "a", "hidden", "b", "c" }.Select(p => new PinnedApp { Path = p }).ToList();
+        PinBefore(pinned, "c", "", "b");
+        PinBefore(pinned, "a", "", null);
+        PinBefore(pinned, "new", "", "c");
+        Debug.Assert(string.Join(",", pinned.Select(p => p.Path)) == "hidden,new,c,b,a",
+            "a dragged icon must land before its new neighbor without moving entries the dock can't show");
     }
 
     public DockWindow(Config config)
@@ -100,7 +113,9 @@ public partial class DockWindow : Window
         MouseMove += (_, e) =>
         {
             if (dragStartY != null) return;
-            anchorX = mouseX = e.GetPosition(Root).X;
+            var p = e.GetPosition(Root);
+            if (pressed != null && !DragTo(p)) return;
+            anchorX = mouseX = p.X;
             HoverZone.Visibility = Visibility.Visible;
             Retarget();
         };
@@ -156,8 +171,9 @@ public partial class DockWindow : Window
     }
 
     static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
-    double BaseWidth(Slot s) => s.Separator ? SepW : Base + Gap * 2;
-    static double SlotWidth(Slot s) => s.Separator ? SepW : s.Size + Gap * 2;
+    double BaseWidth(Slot s) => s.Separator ? SepW : removing && s == dragged ? 0 : Base + Gap * 2;
+    // The gap shrinks with an icon collapsing below the base size, so a removed icon's slot closes fully.
+    double SlotWidth(Slot s) => s.Separator ? SepW : s.Size + Gap * 2 * Math.Min(1, s.Size / Base);
 
     Slot NewSlot(string key, string name, ImageSource? icon)
     {
@@ -167,7 +183,13 @@ public partial class DockWindow : Window
             Img = new Image { Source = icon, RenderTransform = new TranslateTransform() },
         };
         RenderOptions.SetBitmapScalingMode(s.Img, BitmapScalingMode.HighQuality);
-        s.Img.MouseLeftButtonUp += (_, _) => Click(s);
+        s.Img.MouseLeftButtonDown += (_, e) =>
+        {
+            (pressed, pressAt, grab) = (s, e.GetPosition(Root), e.GetPosition(s.Img));
+            s.Img.CaptureMouse();
+        };
+        s.Img.MouseLeftButtonUp += (_, _) => EndPress(commit: true);
+        s.Img.LostMouseCapture += (_, _) => EndPress(commit: false);
         s.Img.MouseRightButtonUp += (_, e) => { ShowMenu(s); e.Handled = true; };
         s.Img.MouseEnter += (_, _) => { hovered = s; Layout(); };
         s.Img.MouseLeave += (_, _) => { if (hovered == s) hovered = null; Layout(); };
@@ -194,6 +216,7 @@ public partial class DockWindow : Window
 
     void Refresh()
     {
+        if (dragged != null) return; // the drag owns the order until the drop
         var windows = WindowTracker.List();
         var wanted = new List<Slot>();
         foreach (var p in config.Pinned)
@@ -229,7 +252,8 @@ public partial class DockWindow : Window
         foreach (var s in slots)
         {
             var w = BaseWidth(s);
-            s.Target = s.Separator || double.IsNaN(mouseX) ? Base : Magnify(Math.Abs(mouseX - (x + w / 2)), Base, Max, Range);
+            s.Target = removing && s == dragged ? 0
+                : s.Separator || double.IsNaN(mouseX) ? Base : Magnify(Math.Abs(mouseX - (x + w / 2)), Base, Max, Range);
             x += w;
         }
         if (animating) return;
@@ -240,12 +264,18 @@ public partial class DockWindow : Window
     void Animate(object? sender, EventArgs e)
     {
         var done = true;
+        double Ease(double v)
+        {
+            if (Math.Abs(v) < 0.25) return 0;
+            done = false;
+            return v * 0.7;
+        }
         foreach (var s in slots)
         {
-            var d = s.Target - s.Size;
-            if (Math.Abs(d) < 0.25) s.Size = s.Target;
-            else { s.Size += d * 0.3; done = false; }
+            s.Size = s.Target - Ease(s.Target - s.Size);
+            (s.ShiftX, s.ShiftY) = (Ease(s.ShiftX), Ease(s.ShiftY));
         }
+        leftShift = Ease(leftShift);
         Layout();
         if (!done) return;
         CompositionTarget.Rendering -= Animate;
@@ -274,7 +304,7 @@ public partial class DockWindow : Window
         double width = Root.ActualWidth, height = Root.ActualHeight;
         if (width == 0) return;
         var total = Pad * 2 + slots.Sum(SlotWidth);
-        var left = LeftEdge(width);
+        var left = LeftEdge(width) + leftShift;
         var shelfTop = height - BottomMargin - ShelfH;
         Place(Shelf, left, shelfTop, total, ShelfH);
         var zoneTop = shelfTop - (Max - Base) - 4;
@@ -283,21 +313,23 @@ public partial class DockWindow : Window
         var x = left + Pad;
         foreach (var s in slots)
         {
+            var sx = x + s.ShiftX;
             if (s.Separator)
             {
-                Place(s.Line!, x + SepW / 2, shelfTop + 12, 1, ShelfH - 24);
-                if (s == separator) Place(resizeHandle, x, shelfTop, SepW, ShelfH);
+                Place(s.Line!, sx + SepW / 2, shelfTop + 12, 1, ShelfH - 24);
+                if (s == separator) Place(resizeHandle, sx, shelfTop, SepW, ShelfH);
             }
             else
             {
-                Place(s.Img!, x + Gap, height - BottomMargin - 9 - s.Size, s.Size, s.Size);
-                Canvas.SetLeft(s.Dot!, x + Gap + s.Size / 2 - 2);
+                var gap = (SlotWidth(s) - s.Size) / 2;
+                Place(s.Img!, sx + gap, height - BottomMargin - 9 - s.Size + s.ShiftY, s.Size, s.Size);
+                Canvas.SetLeft(s.Dot!, sx + gap + s.Size / 2 - 2);
                 Canvas.SetTop(s.Dot!, height - BottomMargin - 6);
             }
             x += SlotWidth(s);
         }
 
-        if (hovered?.Img is { } img)
+        if (hovered?.Img is { } img && dragged == null)
         {
             LabelText.Text = hovered.Name;
             Label.Visibility = Visibility.Visible;
@@ -314,6 +346,118 @@ public partial class DockWindow : Window
         Canvas.SetTop(e, y);
         e.Width = width;
         e.Height = height;
+    }
+
+    /// <summary>Moves (or adds) the entry for key to just before next, or to the end; entries the dock can't show keep their place.</summary>
+    static void PinBefore(List<PinnedApp> pinned, string key, string name, string? next)
+    {
+        var entry = pinned.Find(p => Same(p.Path, key)) ?? new() { Name = name, Path = key };
+        pinned.Remove(entry);
+        var at = next == null ? -1 : pinned.FindIndex(p => Same(p.Path, next));
+        pinned.Insert(at < 0 ? pinned.Count : at, entry);
+    }
+
+    double X(Slot s) => Canvas.GetLeft(s.Separator ? s.Line! : s.Img!);
+
+    /// <summary>Applies an order or width change, then slides everything over from where it was drawn.</summary>
+    void Rearrange(Action change)
+    {
+        var left = LeftEdge(Root.ActualWidth);
+        var before = slots.ToDictionary(s => s, X);
+        change();
+        leftShift += left - LeftEdge(Root.ActualWidth);
+        Layout();
+        foreach (var s in slots) s.ShiftX += before[s] - X(s);
+        Retarget();
+    }
+
+    void MoveTo(Slot s, int index)
+    {
+        var i = slots.IndexOf(s);
+        if (i != index) Rearrange(() => { slots.RemoveAt(i); slots.Insert(index, s); });
+    }
+
+    /// <summary>Index for the dragged icon under x, kept among the pinned icons as on macOS.</summary>
+    int DropIndex(double px)
+    {
+        var x = LeftEdge(Root.ActualWidth) + Pad;
+        var index = 0;
+        foreach (var s in slots)
+        {
+            var w = SlotWidth(s);
+            if (s != dragged && px > x + w / 2) index++;
+            x += w;
+        }
+        var pinned = slots.Count(s => s.Pinned && s != dragged);
+        // An unpinned app stays put until it is brought into the pinned icons.
+        return index <= pinned ? index : dragged!.Pinned ? pinned : homeIndex;
+    }
+
+    /// <summary>Moves the pressed icon with the pointer once past the drag threshold; false while it is off the dock.</summary>
+    bool DragTo(Point p)
+    {
+        var s = pressed!;
+        if (dragged == null)
+        {
+            if (s.Trash || Math.Abs(p.X - pressAt.X) < SystemParameters.MinimumHorizontalDragDistance
+                && Math.Abs(p.Y - pressAt.Y) < SystemParameters.MinimumVerticalDragDistance) return true;
+            (dragged, hovered, homeIndex) = (s, null, slots.IndexOf(s));
+            GhostImg.Source = s.Img!.Source;
+            GhostImg.Width = GhostImg.Height = s.Size;
+            s.Img.Opacity = 0; // keeps the mouse capture, unlike hiding it
+        }
+
+        var zone = new Rect(Canvas.GetLeft(HoverZone), Canvas.GetTop(HoverZone), HoverZone.Width, HoverZone.Height);
+        zone.Inflate(Base / 2, Base / 2);
+        var off = !zone.Contains(p);
+        var remove = off && s.Pinned;
+        if (remove != removing) Rearrange(() => removing = remove);
+        // Off the dock, an icon that can't be removed waits in its old spot.
+        MoveTo(s, remove ? slots.IndexOf(s) : off ? homeIndex : DropIndex(p.X));
+        RemoveLabel.Visibility = remove ? Visibility.Visible : Visibility.Collapsed;
+        s.Dot!.Opacity = remove ? 0 : 1;
+
+        ghostAt = new Point(p.X - grab.X, p.Y - grab.Y);
+        GhostPanel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        Ghost.HorizontalOffset = ghostAt.X - (GhostPanel.DesiredSize.Width - GhostImg.Width) / 2;
+        Ghost.VerticalOffset = ghostAt.Y - (GhostPanel.DesiredSize.Height - GhostImg.Height);
+        Ghost.IsOpen = true;
+        if (off)
+        {
+            mouseX = double.NaN;
+            Retarget();
+        }
+        return !off;
+    }
+
+    /// <summary>Ends a press: a click if it never dragged, otherwise keeps the new spot (pinning the app) or removes it.</summary>
+    void EndPress(bool commit)
+    {
+        if (pressed is not { } s) return;
+        pressed = null;
+        s.Img!.ReleaseMouseCapture(); // re-enters through LostMouseCapture and returns above
+        if (dragged == null)
+        {
+            if (commit) Click(s);
+            return;
+        }
+        dragged = null;
+        Ghost.IsOpen = false;
+        RemoveLabel.Visibility = Visibility.Collapsed;
+        s.Img.Opacity = s.Dot!.Opacity = 1;
+
+        if (commit && removing) config.Pinned.RemoveAll(p => Same(p.Path, s.Key));
+        else if (commit && slots.IndexOf(s) != homeIndex)
+            PinBefore(config.Pinned, s.Key, s.Name, slots.Skip(slots.IndexOf(s) + 1).FirstOrDefault(x => x.Pinned)?.Key);
+        else commit = false;
+        removing = false;
+        if (commit) config.Save();
+        Refresh();
+        Layout();
+        // The icon slides from where it was let go into its spot.
+        s.ShiftX += ghostAt.X - Canvas.GetLeft(s.Img);
+        s.ShiftY += ghostAt.Y - Canvas.GetTop(s.Img);
+        Retarget();
     }
 
     void Click(Slot s)
