@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.Net.NetworkInformation;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -70,6 +71,65 @@ public partial class MenuBarWindow : Window
         timer.Tick += (_, _) => Tick();
         timer.Start();
         Tick();
+        // The Hangul key changes the mode without any event we can watch, so poll it quickly.
+        var imeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        imeTimer.Tick += (_, _) => UpdateIme();
+        imeTimer.Start();
+    }
+
+    /// <summary>The taskbar's input indicator for the Korean IME in the foreground app: 한 in Hangul mode, A otherwise.</summary>
+    // shortcut: reads the mode through IMM, so a TSF-only app may always show A; other languages show nothing.
+    void UpdateIme()
+    {
+        var h = GetForegroundWindow();
+        var korean = ((long)GetKeyboardLayout(GetWindowThreadProcessId(h, out _)) & 0xFFFF) == 0x412;
+        ImeButton.Visibility = korean ? Visibility.Visible : Visibility.Collapsed;
+        if (!korean) return;
+        // WM_IME_CONTROL with IMC_GETCONVERSIONMODE; IME_CMODE_NATIVE (1) is Hangul. SMTO_ABORTIFHUNG.
+        var answered = SendMessageTimeout(ImmGetDefaultIMEWnd(h), 0x283, 1, IntPtr.Zero, 2, 100, out var mode) != IntPtr.Zero;
+        var text = answered && ((long)mode & 1) != 0 ? "한" : "A";
+        if (text == imeText) return;
+        imeText = text;
+        var typeface = new Typeface((FontFamily)FindResource("UiFont"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal);
+        // Sized and placed to match the text in the macOS badge: centered, and 0.7 below the middle.
+        var glyphs = new FormattedText(text, Korean, FlowDirection.LeftToRight, typeface, text == "A" ? 12.5 : 12, Brushes.Black,
+            VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        double width = ImeBadge.Width, height = ImeBadge.Height;
+        var at = new Point((width - glyphs.WidthIncludingTrailingWhitespace) / 2, (height - glyphs.Height) / 2 + 0.7);
+        ImeBadge.Data = new CombinedGeometry(GeometryCombineMode.Exclude,
+            new RectangleGeometry(new Rect(0, 0, width, height), 4.2, 4.2), glyphs.BuildGeometry(at));
+    }
+
+    string? imeText; // the letter cut out of the IME badge
+
+    /// <summary>
+    /// Explorer draws its network icon itself and never hands it to a tray host, so draw it here: ‹···› while a wired
+    /// connection is up, else Wi-Fi with the arcs beyond its signal strength dimmed, all of them when disconnected.
+    /// </summary>
+    void UpdateNetwork()
+    {
+        // A gateway leaves out virtual adapters (WAN miniports, Hyper-V switches, tunnels).
+        var wired = NetworkInterface.GetAllNetworkInterfaces().Any(n => n.OperationalStatus == OperationalStatus.Up
+            && n.NetworkInterfaceType is NetworkInterfaceType.Ethernet or NetworkInterfaceType.GigabitEthernet
+            && n.GetIPProperties().GatewayAddresses.Count > 0);
+        Ethernet.Visibility = wired ? Visibility.Visible : Visibility.Collapsed;
+        Wifi.Visibility = wired ? Visibility.Collapsed : Visibility.Visible;
+        if (wired) return;
+        var bars = WifiSignal() is not { } quality ? 0 : quality >= 67 ? 3 : quality >= 34 ? 2 : 1;
+        WifiBar1.Opacity = bars >= 1 ? 1 : 0.3;
+        WifiBar2.Opacity = bars >= 2 ? 1 : 0.3;
+        WifiBar3.Opacity = bars >= 3 ? 1 : 0.3;
+    }
+
+    void Network_Click(object sender, RoutedEventArgs e) => Sys.Launch("ms-availablenetworks:");
+
+    // The bar never takes focus, so the Hangul key reaches the foreground app, as on the taskbar.
+    void Ime_Click(object sender, RoutedEventArgs e)
+    {
+        const byte Hangul = 0x15;
+        keybd_event(Hangul, 0, 0, UIntPtr.Zero);
+        keybd_event(Hangul, 0, 2, UIntPtr.Zero); // KEYEVENTF_KEYUP
+        UpdateIme();
     }
 
     void OnForeground(IntPtr h)
@@ -178,6 +238,7 @@ public partial class MenuBarWindow : Window
     void Tick()
     {
         ReadySearch();
+        UpdateNetwork();
         // A UWP frame gets its app child only after it comes to the front, so resolve again.
         OnForeground(GetForegroundWindow());
         Clock.Text = DateTime.Now.ToString("M월 d일 (ddd) tt h:mm", Korean);

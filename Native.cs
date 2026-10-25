@@ -70,6 +70,9 @@ static class Native
     [DllImport("user32.dll")] public static extern bool LockWorkStation();
     [DllImport("user32.dll")] public static extern int GetDoubleClickTime();
     [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vk);
+    [DllImport("user32.dll")] public static extern IntPtr GetKeyboardLayout(uint thread);
+    [DllImport("imm32.dll")] public static extern IntPtr ImmGetDefaultIMEWnd(IntPtr h);
+    [DllImport("user32.dll")] public static extern IntPtr SendMessageTimeout(IntPtr h, uint msg, IntPtr w, IntPtr l, uint flags, uint timeout, out IntPtr result);
     [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(long point);
     [DllImport("user32.dll")] public static extern IntPtr SetWindowsHookEx(int id, HookProc proc, IntPtr module, uint threadId);
     [DllImport("user32.dll")] public static extern bool UnhookWindowsHookEx(IntPtr hook);
@@ -206,6 +209,34 @@ static class Native
             finally { PropVariantClear(ref value); }
         }
         finally { Marshal.ReleaseComObject(store); }
+    }
+
+    [DllImport("wlanapi.dll")] static extern int WlanOpenHandle(uint version, IntPtr reserved, out uint negotiated, out IntPtr handle);
+    [DllImport("wlanapi.dll")] static extern int WlanEnumInterfaces(IntPtr handle, IntPtr reserved, out IntPtr list);
+    [DllImport("wlanapi.dll")]
+    static extern int WlanQueryInterface(IntPtr handle, ref Guid iface, int opcode, IntPtr reserved, out int size, out IntPtr data, IntPtr type);
+    [DllImport("wlanapi.dll")] static extern void WlanFreeMemory(IntPtr memory);
+    static IntPtr wlan;
+
+    /// <summary>Signal quality (0–100) of the connected Wi-Fi network; null when none is connected.</summary>
+    public static int? WifiSignal()
+    {
+        if (wlan == IntPtr.Zero && WlanOpenHandle(2, IntPtr.Zero, out _, out wlan) != 0) return null;
+        if (WlanEnumInterfaces(wlan, IntPtr.Zero, out var list) != 0) return null;
+        try
+        {
+            for (var i = 0; i < Marshal.ReadInt32(list); i++)
+            {
+                var info = list + 8 + i * 532; // WLAN_INTERFACE_INFO: GUID, description[256], state
+                if (Marshal.ReadInt32(info, 528) != 1) continue; // wlan_interface_state_connected
+                var id = Marshal.PtrToStructure<Guid>(info);
+                if (WlanQueryInterface(wlan, ref id, 7, IntPtr.Zero, out _, out var connection, IntPtr.Zero) != 0) continue; // current_connection
+                try { return Marshal.ReadInt32(connection, 576); } // WLAN_CONNECTION_ATTRIBUTES.wlanAssociationAttributes.wlanSignalQuality
+                finally { WlanFreeMemory(connection); }
+            }
+            return null;
+        }
+        finally { WlanFreeMemory(list); }
     }
 
     [ComImport, Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]

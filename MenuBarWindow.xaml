@@ -78,12 +78,61 @@
                                     </Style.Triggers>
                                 </Style>
                             </Border.Style>
-                            <Image Source="{Binding Icon}" Width="16" Height="16" VerticalAlignment="Center"
-                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                            <Grid VerticalAlignment="Center">
+                                <Image x:Name="Icon" Source="{Binding Icon}" Width="16" Height="16"
+                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                <!-- macOS speaker.wave.3.fill in place of Windows' volume icon; clicks still reach it.
+                                     The macOS icons here are traced over menu bar captures, in pt as DIPs. -->
+                                <Viewbox x:Name="Speaker" Width="18.4" Height="12.4" Stretch="Fill" Visibility="Collapsed">
+                                    <Canvas Width="17.5" Height="12.5">
+                                        <Path Fill="{DynamicResource BarFg}" Stroke="{DynamicResource BarFg}" StrokeThickness="0.7" StrokeLineJoin="Round"
+                                              Data="M0.35,3.7 L2.9,3.7 7.45,0.35 7.45,12.15 2.9,8.8 0.35,8.8 Z"/>
+                                        <Path Stroke="{DynamicResource BarFg}" StrokeThickness="1.3" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                              Data="M10.07,3.36 A5.45,5.45 0 0 1 10.07,9.14 M12.83,1.64 A8.7,8.7 0 0 1 12.83,10.86 M15.4,0.6 A11.9,11.9 0 0 1 15.4,11.9"/>
+                                    </Canvas>
+                                </Viewbox>
+                            </Grid>
                         </Border>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding Identifier}" Value="7820ae73-23e3-4229-82c1-e41cb67d5b9c"> <!-- VOLUME_GUID -->
+                                <Setter TargetName="Icon" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="Speaker" Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+            <Button x:Name="ImeButton" Style="{StaticResource BarButton}" Click="Ime_Click" Visibility="Collapsed">
+                <!-- A badge with its text cut out, so the bar shows through it, as on macOS; drawn in UpdateIme. -->
+                <Path x:Name="ImeBadge" Width="21.5" Height="15.5" Fill="{DynamicResource BarFg}"/>
+            </Button>
+            <Button Style="{StaticResource BarButton}" Click="Network_Click">
+                <Grid>
+                    <!-- Wired: ‹···› -->
+                    <Canvas x:Name="Ethernet" Width="18.5" Height="10" Visibility="Collapsed">
+                        <Path Stroke="{DynamicResource BarFg}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round" Data="M4.75,0.8 L0.8,5 4.75,9.2 M13.75,0.8 L17.7,5 13.75,9.2"/>
+                        <Path Fill="{DynamicResource BarFg}">
+                            <Path.Data>
+                                <GeometryGroup>
+                                    <EllipseGeometry Center="5.75,5" RadiusX="1" RadiusY="1"/>
+                                    <EllipseGeometry Center="9.25,5" RadiusX="1" RadiusY="1"/>
+                                    <EllipseGeometry Center="12.75,5" RadiusX="1" RadiusY="1"/>
+                                </GeometryGroup>
+                            </Path.Data>
+                        </Path>
+                    </Canvas>
+                    <!-- Wi-Fi: a rounded wedge and two arcs; the ones beyond the signal strength are dimmed. -->
+                    <Canvas x:Name="Wifi" Width="15.5" Height="11.5">
+                        <Path x:Name="WifiBar1" Fill="{DynamicResource BarFg}" Stroke="{DynamicResource BarFg}" StrokeThickness="0.8"
+                              StrokeLineJoin="Round" Data="M7.75,10.9 L6.09,9.24 A2.35,2.35 0 0 1 9.41,9.24 Z"/>
+                        <Path x:Name="WifiBar2" Stroke="{DynamicResource BarFg}" StrokeThickness="2.15" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              Data="M3.75,6.55 A5.65,5.65 0 0 1 11.75,6.55"/>
+                        <Path x:Name="WifiBar3" Stroke="{DynamicResource BarFg}" StrokeThickness="2.15" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              Data="M1.05,3.8 A9.55,9.55 0 0 1 14.45,3.8"/>
+                    </Canvas>
+                </Grid>
+            </Button>
             <Button x:Name="BatteryButton" Style="{StaticResource BarButton}" Click="Battery_Click">
                 <StackPanel Orientation="Horizontal">
                     <Border Width="23" Height="11" BorderThickness="1" CornerRadius="3" Padding="1.5"
@@ -97,7 +146,19 @@
                 </StackPanel>
             </Button>
             <Button Style="{StaticResource BarButton}" Click="Control_Click" ToolTip="빠른 설정">
-                <TextBlock Style="{StaticResource Glyph}" Text="&#xE713;"/>
+                <!-- macOS Control Center (switch.2): an off switch over an on switch, each with a capsule knob. -->
+                <Path Width="12.5" Height="12.5" Fill="{DynamicResource BarFg}">
+                    <Path.Data>
+                        <GeometryGroup FillRule="EvenOdd">
+                            <RectangleGeometry Rect="0,0,12.5,5.2" RadiusX="2.6" RadiusY="2.6"/>
+                            <RectangleGeometry Rect="1,1,10.5,3.2" RadiusX="1.6" RadiusY="1.6"/>
+                            <RectangleGeometry Rect="1.55,1.55,5.05,2.1" RadiusX="1.05" RadiusY="1.05"/>
+                            <RectangleGeometry Rect="0,7.3,12.5,5.2" RadiusX="2.6" RadiusY="2.6"/>
+                            <RectangleGeometry Rect="5.35,8.3,6.15,3.2" RadiusX="1.6" RadiusY="1.6"/>
+                            <RectangleGeometry Rect="5.9,8.85,5.05,2.1" RadiusX="1.05" RadiusY="1.05"/>
+                        </GeometryGroup>
+                    </Path.Data>
+                </Path>
             </Button>
             <Button Style="{StaticResource BarButton}" Click="Clock_Click">
                 <TextBlock x:Name="Clock"/>
