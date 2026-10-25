@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Runtime.InteropServices;
 using System.Windows.Controls.Primitives;
 using static Mindows.Native;
 
@@ -64,6 +65,55 @@ static class Menus
     {
         var menu = new ContextMenu { PlacementTarget = target, Placement = placement };
         foreach (var item in items) menu.Items.Add(item ?? new Separator());
+
         menu.IsOpen = true;
+        WatchForDismiss(menu);
+    }
+
+    // The bars are WS_EX_NOACTIVATE, so Windows sends an open menu neither keys (Esc) nor clicks on other
+    // apps' windows, and WPF never closes it. Activating the menu instead makes WPF close it at once
+    // (it loses capture/focus), so watch input globally while it is open.
+    static IntPtr mouseHook, keyHook;
+    static HookProc? mouseProc, keyProc; // held so the GC keeps the native callbacks alive
+    static ContextMenu? watched;
+
+    static void WatchForDismiss(ContextMenu menu)
+    {
+        Unhook();
+        watched = menu;
+        void Dismiss() => menu.Dispatcher.BeginInvoke(() => menu.IsOpen = false);
+        mouseProc = (code, msg, data) =>
+        {
+            // WM_LBUTTONDOWN, WM_RBUTTONDOWN, WM_MBUTTONDOWN; clicks on our own windows reach the menu normally.
+            if (code >= 0 && msg is 0x201 or 0x204 or 0x207)
+            {
+                long x = Marshal.ReadInt32(data), y = Marshal.ReadInt32(data, 4);
+                GetWindowThreadProcessId(WindowFromPoint((y << 32) | (uint)x), out var pid);
+                if (pid != Environment.ProcessId) Dismiss();
+            }
+            return CallNextHookEx(IntPtr.Zero, code, msg, data);
+        };
+        keyProc = (code, msg, data) =>
+        {
+            if (code >= 0 && msg == 0x100 && Marshal.ReadInt32(data) == 0x1B) // WM_KEYDOWN, VK_ESCAPE
+            {
+                Dismiss();
+                return 1; // swallow it so the app behind the menu doesn't also act on Esc
+            }
+            return CallNextHookEx(IntPtr.Zero, code, msg, data);
+        };
+        var module = GetModuleHandle(null);
+        mouseHook = SetWindowsHookEx(14, mouseProc, module, 0); // WH_MOUSE_LL
+        keyHook = SetWindowsHookEx(13, keyProc, module, 0);     // WH_KEYBOARD_LL
+        // A late Closed from the previous menu must not unhook the one just opened.
+        menu.Closed += (_, _) => { if (watched == menu) Unhook(); };
+    }
+
+    static void Unhook()
+    {
+        if (mouseHook != IntPtr.Zero) UnhookWindowsHookEx(mouseHook);
+        if (keyHook != IntPtr.Zero) UnhookWindowsHookEx(keyHook);
+        mouseHook = keyHook = IntPtr.Zero;
+        watched = null;
     }
 }
