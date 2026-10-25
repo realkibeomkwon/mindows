@@ -76,6 +76,7 @@ static class Menus
     static IntPtr mouseHook, keyHook;
     static HookProc? mouseProc, keyProc; // held so the GC keeps the native callbacks alive
     static ContextMenu? watched;
+    public static bool IsOpen => watched != null;
 
     static void WatchForDismiss(ContextMenu menu)
     {

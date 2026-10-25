@@ -54,6 +54,8 @@ public partial class DockWindow : Window
     bool removing;               // a pinned icon dragged off the dock: drop removes it, its gap closes
     double leftShift;
     bool animating;
+    bool hidden;                 // auto-hide has slid the dock below the screen edge
+    readonly DispatcherTimer hideTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
 
     static DockWindow()
     {
@@ -73,7 +75,8 @@ public partial class DockWindow : Window
     {
         this.config = config;
         InitializeComponent();
-        bar = new AppBar(this, AppBar.Bottom, () => BottomMargin + ShelfH + 3, () => WindowH);
+        // Auto-hide reserves nothing, so maximized windows reach the bottom of the screen.
+        bar = new AppBar(this, AppBar.Bottom, () => config.DockAutoHide ? 0 : BottomMargin + ShelfH + 3, () => WindowH);
 
         Slot NewSeparator()
         {
@@ -125,7 +128,13 @@ public partial class DockWindow : Window
             hovered = null;
             HoverZone.Visibility = Visibility.Collapsed;
             Retarget();
+            if (!config.DockAutoHide) return;
+            hideTimer.Start();
+            TryHide(); // the timer retries while a drag or an open menu keeps the dock up
         };
+        EdgeTrigger.MouseEnter += (_, _) => { if (hidden) Slide(hide: false); };
+        hideTimer.Tick += (_, _) => TryHide();
+        ApplyAutoHide();
         SizeChanged += (_, _) => Layout();
         Loaded += (_, _) => Refresh();
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -139,7 +148,7 @@ public partial class DockWindow : Window
     double ScreenY() => PointToScreen(Mouse.GetPosition(this)).Y / VisualTreeHelper.GetDpi(this).DpiScaleY;
 
     /// <summary>Resizes live while dragging; <paramref name="commit"/> also re-reserves the screen strip and saves.</summary>
-    void SetIconSize(double size, bool commit)
+    public void SetIconSize(double size, bool commit)
     {
         config.DockIconSize = Math.Round(Math.Clamp(size, Config.MinIconSize, Config.MaxIconSize));
         foreach (var s in slots) s.Size = s.Target = Base;
@@ -149,20 +158,56 @@ public partial class DockWindow : Window
             config.Save();
         }
         else bar.Resize();
+        if (hidden) Slide(hide: true); // the hidden offset follows the shelf height
         Layout();
+    }
+
+    public void SetMagnification(bool on)
+    {
+        config.DockMagnification = on;
+        config.Save();
+        bar.Resize();
+        Retarget();
+    }
+
+    public void SetAutoHide(bool on)
+    {
+        config.DockAutoHide = on;
+        config.Save();
+        bar.Position();
+        ApplyAutoHide();
+    }
+
+    void ApplyAutoHide()
+    {
+        EdgeTrigger.Visibility = config.DockAutoHide ? Visibility.Visible : Visibility.Collapsed;
+        hideTimer.Stop();
+        Slide(hide: config.DockAutoHide && !IsMouseOver);
+    }
+
+    void TryHide()
+    {
+        if (IsMouseOver || Mouse.Captured != null || Menus.IsOpen) return; // a drag or an open menu keeps the dock up
+        hideTimer.Stop();
+        Slide(hide: true);
+    }
+
+    void Slide(bool hide)
+    {
+        hidden = hide;
+        var duration = TimeSpan.FromMilliseconds(config.DockAutoHideAnimation ? 250 : 0);
+        var slide = new DoubleAnimation(hide ? BottomMargin + ShelfH + 2 : 0, duration)
+        {
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+        };
+        Root.RenderTransform.BeginAnimation(TranslateTransform.YProperty, slide);
     }
 
     void ShowDockMenu()
     {
         var items = new List<Control?>
         {
-            Menus.Item("확대 효과", () =>
-            {
-                config.DockMagnification = !config.DockMagnification;
-                config.Save();
-                bar.Resize();
-                Retarget();
-            }, isChecked: config.DockMagnification),
+            Menus.Item("확대 효과", () => SetMagnification(!config.DockMagnification), isChecked: config.DockMagnification),
             null,
         };
         foreach (var (name, size) in new[] { ("작게", 36.0), ("보통", 48.0), ("크게", 64.0), ("아주 크게", 80.0) })

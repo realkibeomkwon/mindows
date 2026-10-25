@@ -23,8 +23,11 @@ public partial class MenuBarWindow : Window
     IntPtr foreground;
     AppInfo? foregroundApp;
 
-    public MenuBarWindow(NotificationArea? tray)
+    readonly Action openSettings;
+
+    public MenuBarWindow(NotificationArea? tray, Action openSettings)
     {
+        this.openSettings = openSettings;
         InitializeComponent();
         _ = new AppBar(this, AppBar.Top, () => BarHeight, () => BarHeight);
         if (tray != null) TrayIcons.ItemsSource = TrayView(tray);
@@ -87,7 +90,8 @@ public partial class MenuBarWindow : Window
             Menus.Item("화면 잠금", () => LockWorkStation()),
             Menus.Item("로그아웃...", () => { if (Sys.Confirm("로그아웃하시겠습니까?")) ExitWindowsEx(0, 0); }),
             null,
-            Menus.Item("Mindows 종료", () => Application.Current.Shutdown()),
+            Menus.Item("Mindows 설정...", openSettings),
+            Menus.Item("Mindows 종료",() => Application.Current.Shutdown()),
         });
     }
 

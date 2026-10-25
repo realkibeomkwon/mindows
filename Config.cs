@@ -22,6 +22,9 @@ public class Config
     /// <summary>Dock icon size at rest, in DIPs.</summary>
     public double DockIconSize { get; set; } = 48;
     public bool DockMagnification { get; set; } = true;
+    public bool DockAutoHide { get; set; }
+    /// <summary>Slide the auto-hiding dock out and in; off, it disappears and appears at once.</summary>
+    public bool DockAutoHideAnimation { get; set; } = true;
 
     public static Config Load()
     {

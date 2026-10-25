@@ -10,6 +10,7 @@ public partial class App : Application
 {
     Mutex? instance;
     static ShellManager? shell;
+    public static bool LightTheme { get; private set; }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -38,8 +39,9 @@ public partial class App : Application
         // Hide first: the tray host takes over the Shell_TrayWnd class, and the state file must hold Explorer's state.
         Taskbar.Hide();
         shell = StartTrayHost();
-        new MenuBarWindow(shell?.NotificationArea).Show();
-        new DockWindow(config).Show();
+        var dock = new DockWindow(config);
+        new MenuBarWindow(shell?.NotificationArea, () => SettingsWindow.Open(config, dock)).Show();
+        dock.Show();
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -89,12 +91,13 @@ public partial class App : Application
 
     void ApplyTheme()
     {
-        var light = Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+        LightTheme = Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
             "SystemUsesLightTheme", 0) is 1;
-        var colors = light
-            ? new[] { "#B8F4F4F4", "#FF1C1C1C", "#F2F6F6F6", "#FF1C1C1C", "#22000000", "#1F000000", "#73F2F2F2", "#55FFFFFF" }
-            : new[] { "#8C1E1E1E", "#FFF5F5F5", "#F22B2B2B", "#FFF0F0F0", "#33FFFFFF", "#33FFFFFF", "#662A2A2A", "#33FFFFFF" };
-        string[] keys = { "BarBg", "BarFg", "MenuBg", "MenuFg", "MenuBorder", "Hover", "DockBg", "DockBorder" };
+        // WindowBg is opaque: normal (non-layered) windows draw translucent backgrounds over black.
+        var colors = LightTheme
+            ? new[] { "#B8F4F4F4", "#FF1C1C1C", "#F2F6F6F6", "#FF1C1C1C", "#22000000", "#1F000000", "#73F2F2F2", "#55FFFFFF", "#FFF4F4F4" }
+            : new[] { "#8C1E1E1E", "#FFF5F5F5", "#F22B2B2B", "#FFF0F0F0", "#33FFFFFF", "#33FFFFFF", "#662A2A2A", "#33FFFFFF", "#FF242424" };
+        string[] keys = { "BarBg", "BarFg", "MenuBg", "MenuFg", "MenuBorder", "Hover", "DockBg", "DockBorder", "WindowBg" };
         for (var i = 0; i < keys.Length; i++)
         {
             var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(colors[i]));

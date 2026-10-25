@@ -5,27 +5,34 @@
         ResizeMode="NoResize" ShowInTaskbar="False" Topmost="True" ShowActivated="False"
         Left="-20000" Top="-20000" Width="10" Height="10"
         FontFamily="{StaticResource UiFont}">
-    <!-- Items are positioned by hand in Layout(); transparent pixels click through to the desktop. -->
-    <Canvas x:Name="Root">
-        <Rectangle x:Name="HoverZone" Fill="#01000000" Visibility="Collapsed"/>
-        <Border x:Name="Shelf" CornerRadius="18" BorderThickness="1"
-                Background="{DynamicResource DockBg}" BorderBrush="{DynamicResource DockBorder}"/>
-        <Border x:Name="Label" Panel.ZIndex="100" CornerRadius="6" Padding="10,3" Visibility="Collapsed"
-                Background="{DynamicResource MenuBg}" BorderBrush="{DynamicResource MenuBorder}" BorderThickness="1"
-                IsHitTestVisible="False">
-            <TextBlock x:Name="LabelText" FontSize="13" Foreground="{DynamicResource MenuFg}"/>
-        </Border>
-        <!-- The icon being dragged; a popup so it can leave the dock window. -->
-        <Popup x:Name="Ghost" AllowsTransparency="True" Placement="Relative" PlacementTarget="{Binding ElementName=Root}"
-               IsHitTestVisible="False">
-            <StackPanel x:Name="GhostPanel">
-                <Border x:Name="RemoveLabel" HorizontalAlignment="Center" Margin="0,0,0,8" CornerRadius="6" Padding="10,3"
-                        Visibility="Collapsed" Background="{DynamicResource MenuBg}"
-                        BorderBrush="{DynamicResource MenuBorder}" BorderThickness="1">
-                    <TextBlock Text="제거" FontSize="13" Foreground="{DynamicResource MenuFg}"/>
-                </Border>
-                <Image x:Name="GhostImg" RenderOptions.BitmapScalingMode="HighQuality"/>
-            </StackPanel>
-        </Popup>
-    </Canvas>
+    <Grid>
+        <!-- Items are positioned by hand in Layout(); transparent pixels click through to the desktop. -->
+        <Canvas x:Name="Root">
+            <Canvas.RenderTransform>
+                <TranslateTransform/> <!-- slides the dock below the screen edge when it auto-hides -->
+            </Canvas.RenderTransform>
+            <Rectangle x:Name="HoverZone" Fill="#01000000" Visibility="Collapsed"/>
+            <Border x:Name="Shelf" CornerRadius="18" BorderThickness="1"
+                    Background="{DynamicResource DockBg}" BorderBrush="{DynamicResource DockBorder}"/>
+            <Border x:Name="Label" Panel.ZIndex="100" CornerRadius="6" Padding="10,3" Visibility="Collapsed"
+                    Background="{DynamicResource MenuBg}" BorderBrush="{DynamicResource MenuBorder}" BorderThickness="1"
+                    IsHitTestVisible="False">
+                <TextBlock x:Name="LabelText" FontSize="13" Foreground="{DynamicResource MenuFg}"/>
+            </Border>
+            <!-- The icon being dragged; a popup so it can leave the dock window. -->
+            <Popup x:Name="Ghost" AllowsTransparency="True" Placement="Relative" PlacementTarget="{Binding ElementName=Root}"
+                   IsHitTestVisible="False">
+                <StackPanel x:Name="GhostPanel">
+                    <Border x:Name="RemoveLabel" HorizontalAlignment="Center" Margin="0,0,0,8" CornerRadius="6" Padding="10,3"
+                            Visibility="Collapsed" Background="{DynamicResource MenuBg}"
+                            BorderBrush="{DynamicResource MenuBorder}" BorderThickness="1">
+                        <TextBlock Text="제거" FontSize="13" Foreground="{DynamicResource MenuFg}"/>
+                    </Border>
+                    <Image x:Name="GhostImg" RenderOptions.BitmapScalingMode="HighQuality"/>
+                </StackPanel>
+            </Popup>
+        </Canvas>
+        <!-- While auto-hiding: touching the bottom screen edge brings the dock back. -->
+        <Rectangle x:Name="EdgeTrigger" Height="1" VerticalAlignment="Bottom" Fill="#01000000" Visibility="Collapsed"/>
+    </Grid>
 </Window>
