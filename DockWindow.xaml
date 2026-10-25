@@ -1,0 +1,37 @@
+<Window x:Class="Mindows.DockWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Mindows Dock" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize" ShowInTaskbar="False" Topmost="True" ShowActivated="False"
+        Left="-20000" Top="-20000" Width="10" Height="10"
+        FontFamily="{StaticResource UiFont}">
+    <Grid>
+        <!-- Items are positioned by hand in Layout(); transparent pixels click through to the desktop. -->
+        <Canvas x:Name="Root">
+            <Canvas.RenderTransform>
+                <TranslateTransform/> <!-- slides the dock below the screen edge when it auto-hides -->
+            </Canvas.RenderTransform>
+            <Rectangle x:Name="HoverZone" Fill="#01000000" Visibility="Collapsed"/>
+            <Border x:Name="Shelf" CornerRadius="18" BorderThickness="1"
+                    Background="{DynamicResource DockBg}" BorderBrush="{DynamicResource DockBorder}"/>
+            <!-- macOS-style name tag: a translucent pill with an arrow, one shape so the fill doesn't double up where they meet. -->
+            <Grid x:Name="Label" Panel.ZIndex="100" Visibility="Collapsed" IsHitTestVisible="False">
+                <Path x:Name="LabelShape" Fill="{DynamicResource DockBg}" Stroke="{DynamicResource DockBorder}" StrokeThickness="1"/>
+                <TextBlock x:Name="LabelText" FontSize="13" Margin="12,3,12,9" Foreground="{DynamicResource BarFg}"/>
+            </Grid>
+            <!-- The icon being dragged; a popup so it can leave the dock window. -->
+            <Popup x:Name="Ghost" AllowsTransparency="True" Placement="Relative" PlacementTarget="{Binding ElementName=Root}"
+                   IsHitTestVisible="False">
+                <StackPanel x:Name="GhostPanel">
+                    <Grid x:Name="RemoveLabel" HorizontalAlignment="Center" Margin="0,0,0,4" Visibility="Collapsed">
+                        <Path x:Name="RemoveShape" Fill="{DynamicResource DockBg}" Stroke="{DynamicResource DockBorder}" StrokeThickness="1"/>
+                        <TextBlock x:Name="RemoveText" Text="제거" FontSize="13" Margin="12,3,12,9" Foreground="{DynamicResource BarFg}"/>
+                    </Grid>
+                    <Image x:Name="GhostImg" RenderOptions.BitmapScalingMode="HighQuality"/>
+                </StackPanel>
+            </Popup>
+        </Canvas>
+        <!-- While auto-hiding: touching the bottom screen edge brings the dock back. -->
+        <Rectangle x:Name="EdgeTrigger" Height="1" VerticalAlignment="Bottom" Fill="#01000000" Visibility="Collapsed"/>
+    </Grid>
+</Window>
