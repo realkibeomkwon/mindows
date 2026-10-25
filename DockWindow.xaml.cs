@@ -97,7 +97,7 @@ public partial class DockWindow : Window
         trash = NewSlot(TrashKey, "휴지통", IconLoader.Get(TrashKey));
         trash.Trash = true;
 
-        // As on macOS: drag the separator up or down to resize, right-click it or the shelf for options.
+        // As on macOS: drag the separator up or down to resize.
         resizeHandle = new Rectangle { Fill = Brushes.Transparent, Cursor = Cursors.SizeNS };
         Root.Children.Add(resizeHandle);
         resizeHandle.MouseLeftButtonDown += (_, e) =>
@@ -117,8 +117,6 @@ public partial class DockWindow : Window
             resizeHandle.ReleaseMouseCapture();
             SetIconSize(Base, commit: true);
         };
-        resizeHandle.MouseRightButtonUp += (_, e) => { ShowDockMenu(); e.Handled = true; };
-        Shelf.MouseRightButtonUp += (_, e) => { ShowDockMenu(); e.Handled = true; };
 
         MouseMove += (_, e) =>
         {
@@ -208,18 +206,6 @@ public partial class DockWindow : Window
             EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
         };
         Root.RenderTransform.BeginAnimation(TranslateTransform.YProperty, slide);
-    }
-
-    void ShowDockMenu()
-    {
-        var items = new List<Control?>
-        {
-            Menus.Item("확대 효과", () => SetMagnification(!config.DockMagnification), isChecked: config.DockMagnification),
-            null,
-        };
-        foreach (var (name, size) in new[] { ("작게", 36.0), ("보통", 48.0), ("크게", 64.0), ("아주 크게", 80.0) })
-            items.Add(Menus.Item($"크기: {name}", () => SetIconSize(size, commit: true), isChecked: Base == size));
-        Menus.Show(Shelf, PlacementMode.MousePoint, items);
     }
 
     static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);

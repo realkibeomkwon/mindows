@@ -29,7 +29,7 @@ public partial class SettingsWindow : Window
         (this.config, this.dock) = (config, dock);
         InitializeComponent();
         Sync();
-        Activated += (_, _) => Sync(); // the dock's own menu and resize handle change these too
+        Activated += (_, _) => Sync(); // the dock's resize handle changes the size too
         Closed += (_, _) => open = null;
         SourceInitialized += (_, _) =>
         {
