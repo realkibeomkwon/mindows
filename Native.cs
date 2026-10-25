@@ -29,7 +29,7 @@ static class Native
     public const int GWL_EXSTYLE = -20;
     public const long WS_EX_TOOLWINDOW = 0x80, WS_EX_APPWINDOW = 0x40000, WS_EX_NOACTIVATE = 0x8000000;
     public const int SW_HIDE = 0, SW_MAXIMIZE = 3, SW_SHOW = 5, SW_MINIMIZE = 6, SW_RESTORE = 9;
-    public const uint WM_CLOSE = 0x10, GW_OWNER = 4, SWP_NOACTIVATE = 0x10;
+    public const uint WM_CLOSE = 0x10, GW_OWNER = 4, SWP_NOSIZE = 1, SWP_NOZORDER = 4, SWP_NOACTIVATE = 0x10;
     public const uint ABM_NEW = 0, ABM_REMOVE = 1, ABM_QUERYPOS = 2, ABM_SETPOS = 3, ABM_GETSTATE = 4, ABM_SETSTATE = 10;
     public static readonly IntPtr HWND_TOPMOST = new(-1);
 
@@ -56,6 +56,15 @@ static class Native
     [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc proc, IntPtr l);
     [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr parent, EnumProc proc, IntPtr l);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT rect);
+    [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
+    [DllImport("win32u.dll")] static extern int NtUserBuildHwndList(IntPtr desktop, IntPtr parent, bool children, bool removeImmersive, uint thread, uint max, [Out] IntPtr[] list, out uint count);
+    [DllImport("user32.dll")] static extern bool PrintWindow(IntPtr h, IntPtr dc, uint flags);
+    [DllImport("gdi32.dll")] static extern IntPtr CreateCompatibleDC(IntPtr dc);
+    [DllImport("gdi32.dll")] static extern IntPtr CreateDIBSection(IntPtr dc, ref BITMAPINFOHEADER bi, uint usage, out IntPtr bits, IntPtr section, uint offset);
+    [DllImport("gdi32.dll")] static extern IntPtr SelectObject(IntPtr dc, IntPtr obj);
+    [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr obj);
+    [DllImport("gdi32.dll")] static extern bool DeleteDC(IntPtr dc);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern uint RegisterWindowMessage(string name);
     [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
     [DllImport("user32.dll")] public static extern bool LockWorkStation();
@@ -83,6 +92,58 @@ static class Native
 
     [StructLayout(LayoutKind.Sequential)]
     struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public uint dwFlags; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct BITMAPINFOHEADER
+    {
+        public int biSize, biWidth, biHeight;
+        public short biPlanes, biBitCount;
+        public int biCompression, biSizeImage, biXPelsPerMeter, biYPelsPerMeter, biClrUsed, biClrImportant;
+    }
+
+    /// <summary>Top-level windows including the shell's immersive ones (Search, Start), which EnumWindows leaves out.</summary>
+    // shortcut: undocumented win32u call (what EnumWindows uses, minus its immersive filter); on any failure
+    // this returns nothing and callers fall back to finding those windows when they come to the front.
+    public static IntPtr[] AllTopLevelWindows()
+    {
+        var list = new IntPtr[8192];
+        try
+        {
+            if (NtUserBuildHwndList(IntPtr.Zero, IntPtr.Zero, false, false, 0, (uint)list.Length, list, out var count) == 0)
+                return list[..(int)Math.Min(count, (uint)list.Length)];
+        }
+        catch (Exception e) when (e is EntryPointNotFoundException or DllNotFoundException) { }
+        return Array.Empty<IntPtr>();
+    }
+
+    /// <summary>
+    /// First row, in window pixels, where another process's window draws anything down its center column.
+    /// Captured with PW_RENDERFULLCONTENT, its transparent parts come out black.
+    /// </summary>
+    public static int? ContentTop(IntPtr h)
+    {
+        GetWindowRect(h, out var r);
+        // Only the left half up to the center column is captured: the cost scales with the area, and PrintWindow ignores a viewport offset.
+        int w = (r.Right - r.Left) / 2 + 1, height = r.Bottom - r.Top;
+        if (w <= 1 || height <= 0) return null;
+        var bi = new BITMAPINFOHEADER { biSize = Marshal.SizeOf<BITMAPINFOHEADER>(), biWidth = w, biHeight = -height, biPlanes = 1, biBitCount = 32 };
+        var dc = CreateCompatibleDC(IntPtr.Zero);
+        var bmp = CreateDIBSection(dc, ref bi, 0, out var bits, IntPtr.Zero, 0); // top-down, so row y starts at y * w
+        var old = SelectObject(dc, bmp);
+        try
+        {
+            if (bmp == IntPtr.Zero || !PrintWindow(h, dc, 2)) return null;
+            for (var y = 0; y < height; y++)
+                if ((Marshal.ReadInt32(bits, (y * w + w - 1) * 4) & 0xFFFFFF) != 0) return y;
+            return null;
+        }
+        finally
+        {
+            SelectObject(dc, old);
+            DeleteObject(bmp);
+            DeleteDC(dc);
+        }
+    }
 
     /// <summary>Primary monitor bounds in physical pixels and its DPI scale.</summary>
     public static (RECT bounds, double scale) PrimaryMonitor()

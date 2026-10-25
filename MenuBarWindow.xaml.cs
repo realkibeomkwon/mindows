@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using ManagedShell.Common.Helpers;
@@ -25,6 +26,16 @@ public partial class MenuBarWindow : Window
 
     readonly Action openSettings;
 
+    // Quick Settings and Search open over Explorer's hidden taskbar at the bottom; while one is open, keep it under the menu bar.
+    const double FlyoutGap = 6;
+    readonly WinEventProc shownHook;
+    readonly DispatcherTimer flyoutTimer = new();
+    readonly Dictionary<IntPtr, int> flyoutTops = new(); // last panel top found in each flyout window
+    IntPtr flyout;
+    int? parkedY;  // the shell's own y for a flyout parked above the screen until its panel is found
+    long parkedAt;
+    IntPtr search; // Search's window, kept under the menu bar while closed
+
     public MenuBarWindow(NotificationArea? tray, Action openSettings)
     {
         this.openSettings = openSettings;
@@ -35,6 +46,11 @@ public partial class MenuBarWindow : Window
         foregroundHook = (_, _, h, idObject, _, _, _) => { if (idObject == 0) OnForeground(h); };
         SetWinEventHook(3, 3, IntPtr.Zero, foregroundHook, 0, 0, 0); // EVENT_SYSTEM_FOREGROUND, out of context
         OnForeground(GetForegroundWindow());
+        // Catch flyouts as they appear, before they take the foreground, so they don't show at the bottom first.
+        shownHook = (_, _, h, idObject, _, _, _) => { if (idObject == 0) WatchFlyout(h); };
+        SetWinEventHook(0x8002, 0x8002, IntPtr.Zero, shownHook, 0, 0, 0); // EVENT_OBJECT_SHOW: Quick Settings
+        SetWinEventHook(0x8018, 0x8018, IntPtr.Zero, shownHook, 0, 0, 0); // EVENT_OBJECT_UNCLOAKED: Search
+        flyoutTimer.Tick += (_, _) => PlaceFlyout();
 
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         timer.Tick += (_, _) => Tick();
@@ -44,6 +60,7 @@ public partial class MenuBarWindow : Window
 
     void OnForeground(IntPtr h)
     {
+        WatchFlyout(h);
         // Shell flyouts, dialogs and our own bars keep the previous app, as on macOS.
         if (!WindowTracker.IsAppWindow(h) && ClassName(h) is not ("Progman" or "WorkerW")) return;
         if (WindowTracker.Resolve(h) is not { } app) return;
@@ -51,8 +68,97 @@ public partial class MenuBarWindow : Window
         AppName.Text = app.Name;
     }
 
+    // Notification Center already starts under the menu bar, and its calendar can't be moved on its own.
+    static bool IsBottomFlyout(IntPtr h) => ClassName(h) == "ControlCenterWindow" /* Quick Settings */ || IsSearch(h);
+
+    static bool IsSearch(IntPtr h) => ClassName(h) == "Windows.UI.Core.CoreWindow" && GetWindowThreadProcessId(h, out var pid) != 0
+        && string.Equals(Path.GetFileName(QueryProcess(pid).exe), "SearchHost.exe", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Moves the closed Search window under the menu bar, so it opens there: it keeps its spot between openings, but
+    /// the shell puts it back at the bottom (e.g. when the work area changes), and its first frame shows before any event.
+    /// Quick Settings is placed afresh at every opening, so only Search can be readied this way.
+    /// </summary>
+    void ReadySearch()
+    {
+        if (!IsVisible) return; // the menu bar isn't in place yet
+        if (!IsWindow(search)) search = AllTopLevelWindows().FirstOrDefault(IsSearch);
+        if (search == IntPtr.Zero || search == flyout || IsShown(search)) return;
+        if (!flyoutTops.TryGetValue(search, out var top))
+        {
+            if (ContentTop(search) is not { } found) return; // a cloaked window still captures its last frame
+            flyoutTops[search] = top = found;
+        }
+        MoveFlyout(search, top);
+    }
+
+    void WatchFlyout(IntPtr h)
+    {
+        if (h == flyout || !IsBottomFlyout(h)) return;
+        flyout = h;
+        // The shell reuses the window, so last time's panel top moves it at once; capturing takes a few frames.
+        if (flyoutTops.TryGetValue(h, out var top)) MoveFlyout(h, top);
+        else
+        {
+            // First sight: park it above the screen until its panel is found, instead of showing it at the bottom first.
+            GetWindowRect(h, out var r);
+            (parkedY, parkedAt) = (r.Top, Environment.TickCount64);
+            SetWindowPos(h, IntPtr.Zero, r.Left, r.Top - r.Bottom, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        flyoutTimer.Start();
+        PlaceFlyout();
+    }
+
+    // Closed, Quick Settings is hidden and Search is cloaked.
+    static bool IsShown(IntPtr h) => IsWindowVisible(h) && DwmGetWindowAttribute(h, 14, out var cloaked, sizeof(int)) == 0 && cloaked == 0; // DWMWA_CLOAKED
+
+    /// <summary>
+    /// Moves the flyout so its panel's top edge sits just under the menu bar, keeping its x. Quick Settings
+    /// grows upward (e.g. the Wi-Fi list), so this runs until the flyout closes.
+    /// </summary>
+    void PlaceFlyout()
+    {
+        if (!IsShown(flyout))
+        {
+            Unpark(); // closed before its panel was found; it must not reopen out of sight
+            flyoutTimer.Stop();
+            flyout = IntPtr.Zero;
+            return;
+        }
+        // Until the panel is drawn, retry every frame.
+        var top = ContentTop(flyout);
+        flyoutTimer.Interval = TimeSpan.FromMilliseconds(top == null ? 16 : 100);
+        if (top == null)
+        {
+            // Never leave it out of sight: if the capture keeps failing, give the shell's own spot back.
+            if (Environment.TickCount64 - parkedAt > 500) Unpark();
+            return;
+        }
+        parkedY = null;
+        flyoutTops[flyout] = top.Value;
+        MoveFlyout(flyout, top.Value);
+    }
+
+    void Unpark()
+    {
+        if (parkedY is not { } y) return;
+        GetWindowRect(flyout, out var r);
+        SetWindowPos(flyout, IntPtr.Zero, r.Left, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        parkedY = null;
+    }
+
+    /// <summary>Moves a flyout so its panel top, <paramref name="top"/> pixels into the window, sits under the menu bar.</summary>
+    void MoveFlyout(IntPtr h, int top)
+    {
+        GetWindowRect(h, out var r);
+        GetWindowRect(new WindowInteropHelper(this).Handle, out var bar);
+        var y = bar.Bottom + (int)Math.Round(FlyoutGap * PrimaryMonitor().scale) - top;
+        if (y != r.Top) SetWindowPos(h, IntPtr.Zero, r.Left, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
     void Tick()
     {
+        ReadySearch();
         // A UWP frame gets its app child only after it comes to the front, so resolve again.
         OnForeground(GetForegroundWindow());
         Clock.Text = DateTime.Now.ToString("M월 d일 (ddd) tt h:mm", Korean);
