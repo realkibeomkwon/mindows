@@ -34,8 +34,17 @@
     <DockPanel LastChildFill="False">
         <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Margin="8,0,0,0">
             <Button x:Name="LogoButton" Style="{StaticResource BarButton}" Click="Logo_Click">
-                <Path Width="13" Height="13" Stretch="Uniform" Fill="{DynamicResource BarFg}"
-                      Data="M0,0 H7 V7 H0 Z M8,0 H15 V7 H8 Z M0,8 H7 V15 H0 Z M8,8 H15 V15 H8 Z"/>
+                <!-- The taskbar's Start logo (Icons\WindowsLogo.svg in the shell's Client.Core package). -->
+                <Path Width="13" Height="13" Stretch="Uniform"
+                      Data="M5.5,11.5 H0.5 C0.2239,11.5 0,11.2761 0,11 V6 H5.5 Z M11.5,11 C11.5,11.2761 11.2761,11.5 11,11.5 H6 V6 H11.5 Z
+                            M5.5,5.5 H0 V0.5 C0,0.2239 0.2239,0 0.5,0 H5.5 Z M11,0 C11.2761,0 11.5,0.2239 11.5,0.5 V5.5 H6 V0 Z">
+                    <Path.Fill>
+                        <LinearGradientBrush StartPoint="0.1515,0" EndPoint="0.803,1">
+                            <GradientStop Color="#4DD2FF" Offset="0"/>
+                            <GradientStop Color="#0078D4" Offset="0.75"/>
+                        </LinearGradientBrush>
+                    </Path.Fill>
+                </Path>
             </Button>
             <Button x:Name="AppButton" Style="{StaticResource BarButton}" Click="App_Click">
                 <TextBlock x:Name="AppName" FontWeight="Bold" Text="Mindows"/>
