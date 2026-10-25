@@ -14,11 +14,11 @@
             <Rectangle x:Name="HoverZone" Fill="#01000000" Visibility="Collapsed"/>
             <Border x:Name="Shelf" CornerRadius="18" BorderThickness="1"
                     Background="{DynamicResource DockBg}" BorderBrush="{DynamicResource DockBorder}"/>
-            <Border x:Name="Label" Panel.ZIndex="100" CornerRadius="6" Padding="10,3" Visibility="Collapsed"
-                    Background="{DynamicResource MenuBg}" BorderBrush="{DynamicResource MenuBorder}" BorderThickness="1"
-                    IsHitTestVisible="False">
-                <TextBlock x:Name="LabelText" FontSize="13" Foreground="{DynamicResource MenuFg}"/>
-            </Border>
+            <!-- macOS-style name tag: a translucent pill with an arrow, one shape so the fill doesn't double up where they meet. -->
+            <Grid x:Name="Label" Panel.ZIndex="100" Visibility="Collapsed" IsHitTestVisible="False">
+                <Path x:Name="LabelShape" Fill="{DynamicResource DockBg}" Stroke="{DynamicResource DockBorder}" StrokeThickness="1"/>
+                <TextBlock x:Name="LabelText" FontSize="13" Margin="12,3,12,9" Foreground="{DynamicResource BarFg}"/>
+            </Grid>
             <!-- The icon being dragged; a popup so it can leave the dock window. -->
             <Popup x:Name="Ghost" AllowsTransparency="True" Placement="Relative" PlacementTarget="{Binding ElementName=Root}"
                    IsHitTestVisible="False">

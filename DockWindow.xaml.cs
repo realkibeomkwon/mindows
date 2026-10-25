@@ -14,15 +14,22 @@ namespace Mindows;
 
 public partial class DockWindow : Window
 {
-    // Sizes in DIPs.
-    const double Pad = 6, Gap = 5, SepW = 15, BottomMargin = 5, Magnification = 1.75;
+    // Sizes in DIPs. The name tag and the dots keep their size at any icon size, as on macOS.
+    const double Magnification = 1.75, TagArrowW = 16, TagArrowH = 6, TagLift = 4;
     const string TrashKey = "::{645FF040-5081-101B-9F08-00AA002F954E}";
 
     double Base => config.DockIconSize;
     double Max => config.DockMagnification ? Math.Round(Base * Magnification) : Base;
     double Range => Base * 3.3;
-    double ShelfH => Base + 18;
-    double WindowH => Max + 56; // room for the magnified icon, the launch bounce and the name label
+    // Proportions measured from a macOS dock, in 52ths of the icon size (a 52px icon there).
+    double Gap => Base * 8 / 52;           // each side of an icon
+    double Inset => Base * 14 / 52;        // shelf edge to icon edge, on all four sides
+    double Pad => Inset - Gap;
+    double SepW => Base * 30 / 52;
+    double Radius => Base * 24 / 52;
+    double BottomMargin => Base * 4 / 52;  // screen edge to shelf
+    double ShelfH => Base + Inset * 2;
+    double WindowH => BottomMargin + Inset * 2 + Max + 36; // room for the magnified icon, the launch bounce and the name tag
 
     sealed class Slot
     {
@@ -352,6 +359,7 @@ public partial class DockWindow : Window
         var left = LeftEdge(width) + leftShift;
         var shelfTop = height - BottomMargin - ShelfH;
         Place(Shelf, left, shelfTop, total, ShelfH);
+        Shelf.CornerRadius = new CornerRadius(Radius);
         var zoneTop = shelfTop - (Max - Base) - 4;
         Place(HoverZone, left, zoneTop, total, height - zoneTop);
 
@@ -361,13 +369,13 @@ public partial class DockWindow : Window
             var sx = x + s.ShiftX;
             if (s.Separator)
             {
-                Place(s.Line!, sx + SepW / 2, shelfTop + 12, 1, ShelfH - 24);
+                Place(s.Line!, sx + SepW / 2, shelfTop + Base * 10 / 52, 1, ShelfH - Base * 20 / 52);
                 if (s == separator) Place(resizeHandle, sx, shelfTop, SepW, ShelfH);
             }
             else
             {
                 var gap = (SlotWidth(s) - s.Size) / 2;
-                Place(s.Img!, sx + gap, height - BottomMargin - 9 - s.Size + s.ShiftY, s.Size, s.Size);
+                Place(s.Img!, sx + gap, height - BottomMargin - Inset - s.Size + s.ShiftY, s.Size, s.Size);
                 Canvas.SetLeft(s.Dot!, sx + gap + s.Size / 2 - 2);
                 Canvas.SetTop(s.Dot!, height - BottomMargin - 6);
             }
@@ -378,11 +386,23 @@ public partial class DockWindow : Window
         {
             LabelText.Text = hovered.Name;
             Label.Visibility = Visibility.Visible;
-            Label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            Canvas.SetLeft(Label, Canvas.GetLeft(img) + hovered.Size / 2 - Label.DesiredSize.Width / 2);
-            Canvas.SetTop(Label, Canvas.GetTop(img) - Label.DesiredSize.Height - 8);
+            LabelShape.Data = TagShape(LabelText);
+            double w = LabelText.DesiredSize.Width, h = LabelText.DesiredSize.Height - TagArrowH;
+            Canvas.SetLeft(Label, Canvas.GetLeft(img) + hovered.Size / 2 - w / 2);
+            // As on macOS, the arrow sits just above the shelf, and rises with a magnified icon.
+            Canvas.SetTop(Label, Canvas.GetTop(img) - Inset - TagLift - h - TagArrowH);
         }
         else Label.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>A name tag's pill and arrow as one shape, sized to its text, whose bottom margin leaves room for the arrow.</summary>
+    static Geometry TagShape(TextBlock text)
+    {
+        text.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        double w = text.DesiredSize.Width, h = text.DesiredSize.Height - TagArrowH;
+        var arrow = new PathGeometry(new[] { new PathFigure(new Point(w / 2 - TagArrowW / 2, h - 1),
+            new[] { new PolyLineSegment(new[] { new Point(w / 2, h + TagArrowH), new Point(w / 2 + TagArrowW / 2, h - 1) }, true) }, true) });
+        return new CombinedGeometry(GeometryCombineMode.Union, new RectangleGeometry(new Rect(0, 0, w, h), h / 2, h / 2), arrow);
     }
 
     static void Place(FrameworkElement e, double x, double y, double width, double height)
