@@ -38,6 +38,7 @@ public partial class DockWindow : Window
     readonly Config config;
     readonly AppBar bar;
     readonly Slot separator, trash;
+    readonly Slot runningSeparator; // between pinned apps and running unpinned ones, shown only when there are some
     readonly Rectangle resizeHandle;
     List<Slot> slots = new();
     Slot? hovered;
@@ -61,9 +62,15 @@ public partial class DockWindow : Window
         InitializeComponent();
         bar = new AppBar(this, AppBar.Bottom, () => BottomMargin + ShelfH + 3, () => WindowH);
 
-        separator = new Slot { Separator = true, Line = new Rectangle() };
-        separator.Line.SetResourceReference(Shape.FillProperty, "MenuBorder");
-        Root.Children.Add(separator.Line);
+        Slot NewSeparator()
+        {
+            var s = new Slot { Separator = true, Line = new Rectangle() };
+            s.Line.SetResourceReference(Shape.FillProperty, "MenuBorder");
+            Root.Children.Add(s.Line);
+            return s;
+        }
+        separator = NewSeparator();
+        runningSeparator = NewSeparator();
         trash = NewSlot(TrashKey, "휴지통", IconLoader.Get(TrashKey));
         trash.Trash = true;
 
@@ -191,11 +198,16 @@ public partial class DockWindow : Window
         var wanted = new List<Slot>();
         foreach (var p in config.Pinned)
             if (!wanted.Any(s => Same(s.Key, p.Path)) && SlotFor(p.Path, p.Name, true) is { } s) wanted.Add(s);
-        foreach (var w in windows)
+        var pinnedCount = wanted.Count;
+        // The window list is in z-order; as on macOS, running apps keep their spot and newly launched ones join at the right end.
+        int Spot(AppWindow w) => slots.FindIndex(s => Same(s.Key, w.App.Key)) is var i and >= 0 ? i : int.MaxValue;
+        foreach (var w in windows.OrderBy(Spot))
             if (!wanted.Any(s => Same(s.Key, w.App.Key)) && SlotFor(w.App.Key, w.App.Name, false, w.App.ExePath) is { } s) wanted.Add(s);
+        if (wanted.Count > pinnedCount) wanted.Insert(pinnedCount, runningSeparator);
+        runningSeparator.Line!.Visibility = wanted.Contains(runningSeparator) ? Visibility.Visible : Visibility.Collapsed;
         if (trash.Img?.Source != null) wanted.AddRange(new[] { separator, trash });
 
-        foreach (var gone in slots.Except(wanted))
+        foreach (var gone in slots.Except(wanted).Where(s => !s.Separator))
         {
             Root.Children.Remove(gone.Img);
             Root.Children.Remove(gone.Dot);
@@ -274,7 +286,7 @@ public partial class DockWindow : Window
             if (s.Separator)
             {
                 Place(s.Line!, x + SepW / 2, shelfTop + 12, 1, ShelfH - 24);
-                Place(resizeHandle, x, shelfTop, SepW, ShelfH);
+                if (s == separator) Place(resizeHandle, x, shelfTop, SepW, ShelfH);
             }
             else
             {
