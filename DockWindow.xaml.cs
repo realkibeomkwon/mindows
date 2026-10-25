@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -14,40 +15,51 @@ namespace Mindows;
 public partial class DockWindow : Window
 {
     // Sizes in DIPs.
-    const double Base = 48, Max = 84, Range = 160, Pad = 6, Gap = 5, SepW = 15;
-    const double BottomMargin = 5, ShelfH = Base + 18, WindowH = 150;
+    const double Pad = 6, Gap = 5, SepW = 15, BottomMargin = 5, Magnification = 1.75;
     const string TrashKey = "::{645FF040-5081-101B-9F08-00AA002F954E}";
+
+    double Base => config.DockIconSize;
+    double Max => config.DockMagnification ? Math.Round(Base * Magnification) : Base;
+    double Range => Base * 3.3;
+    double ShelfH => Base + 18;
+    double WindowH => Max + 56; // room for the magnified icon, the launch bounce and the name label
 
     sealed class Slot
     {
         public string Key = "", Name = "";
         public bool Pinned, Separator, Trash;
         public List<IntPtr> Windows = new();
-        public double Size = Base, Target = Base;
+        public double Size, Target;
         public Image? Img;
         public Ellipse? Dot;
         public Rectangle? Line;
     }
 
     readonly Config config;
+    readonly AppBar bar;
     readonly Slot separator, trash;
+    readonly Rectangle resizeHandle;
     List<Slot> slots = new();
     Slot? hovered;
     double mouseX = double.NaN;  // NaN while the pointer is off the dock
     double anchorX = double.NaN; // the dock point under this x stays put while icons grow or shrink
+    double? dragStartY;          // screen y where a separator drag started
+    double dragStartSize;
     bool animating;
 
     static DockWindow()
     {
-        Debug.Assert(Magnify(0) == Max && Magnify(Range) == Base && Magnify(40) > Magnify(80) && Magnify(80) > Base,
-            "magnification must peak under the pointer and fall off to the base size");
+        Debug.Assert(Magnify(0, 48, 84, 160) == 84 && Magnify(160, 48, 84, 160) == 48
+            && Magnify(40, 48, 84, 160) > Magnify(80, 48, 84, 160) && Magnify(80, 48, 84, 160) > 48
+            && Magnify(0, 48, 48, 160) == 48,
+            "magnification must peak under the pointer, fall off to the base size, and stay flat when off");
     }
 
     public DockWindow(Config config)
     {
         this.config = config;
         InitializeComponent();
-        _ = new AppBar(this, AppBar.Bottom, BottomMargin + ShelfH + 3, WindowH);
+        bar = new AppBar(this, AppBar.Bottom, () => BottomMargin + ShelfH + 3, () => WindowH);
 
         separator = new Slot { Separator = true, Line = new Rectangle() };
         separator.Line.SetResourceReference(Shape.FillProperty, "MenuBorder");
@@ -55,8 +67,32 @@ public partial class DockWindow : Window
         trash = NewSlot(TrashKey, "휴지통", IconLoader.Get(TrashKey));
         trash.Trash = true;
 
+        // As on macOS: drag the separator up or down to resize, right-click it or the shelf for options.
+        resizeHandle = new Rectangle { Fill = Brushes.Transparent, Cursor = Cursors.SizeNS };
+        Root.Children.Add(resizeHandle);
+        resizeHandle.MouseLeftButtonDown += (_, e) =>
+        {
+            (dragStartY, dragStartSize) = (ScreenY(), Base);
+            resizeHandle.CaptureMouse();
+            e.Handled = true;
+        };
+        resizeHandle.MouseMove += (_, _) =>
+        {
+            if (dragStartY is { } y0) SetIconSize(dragStartSize + y0 - ScreenY(), commit: false);
+        };
+        resizeHandle.MouseLeftButtonUp += (_, _) =>
+        {
+            if (dragStartY == null) return;
+            dragStartY = null;
+            resizeHandle.ReleaseMouseCapture();
+            SetIconSize(Base, commit: true);
+        };
+        resizeHandle.MouseRightButtonUp += (_, e) => { ShowDockMenu(); e.Handled = true; };
+        Shelf.MouseRightButtonUp += (_, e) => { ShowDockMenu(); e.Handled = true; };
+
         MouseMove += (_, e) =>
         {
+            if (dragStartY != null) return;
             anchorX = mouseX = e.GetPosition(Root).X;
             HoverZone.Visibility = Visibility.Visible;
             Retarget();
@@ -75,16 +111,54 @@ public partial class DockWindow : Window
         timer.Start();
     }
 
-    static double Magnify(double distance) =>
-        distance >= Range ? Base : Base + (Max - Base) * (Math.Cos(Math.PI * distance / Range) + 1) / 2;
+    static double Magnify(double distance, double size, double max, double range) =>
+        distance >= range ? size : size + (max - size) * (Math.Cos(Math.PI * distance / range) + 1) / 2;
+
+    double ScreenY() => PointToScreen(Mouse.GetPosition(this)).Y / VisualTreeHelper.GetDpi(this).DpiScaleY;
+
+    /// <summary>Resizes live while dragging; <paramref name="commit"/> also re-reserves the screen strip and saves.</summary>
+    void SetIconSize(double size, bool commit)
+    {
+        config.DockIconSize = Math.Round(Math.Clamp(size, Config.MinIconSize, Config.MaxIconSize));
+        foreach (var s in slots) s.Size = s.Target = Base;
+        if (commit)
+        {
+            bar.Position();
+            config.Save();
+        }
+        else bar.Resize();
+        Layout();
+    }
+
+    void ShowDockMenu()
+    {
+        var items = new List<Control?>
+        {
+            Menus.Item("확대 효과", () =>
+            {
+                config.DockMagnification = !config.DockMagnification;
+                config.Save();
+                bar.Resize();
+                Retarget();
+            }, isChecked: config.DockMagnification),
+            null,
+        };
+        foreach (var (name, size) in new[] { ("작게", 36.0), ("보통", 48.0), ("크게", 64.0), ("아주 크게", 80.0) })
+            items.Add(Menus.Item($"크기: {name}", () => SetIconSize(size, commit: true), isChecked: Base == size));
+        Menus.Show(Shelf, PlacementMode.MousePoint, items);
+    }
 
     static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
-    static double BaseWidth(Slot s) => s.Separator ? SepW : Base + Gap * 2;
+    double BaseWidth(Slot s) => s.Separator ? SepW : Base + Gap * 2;
     static double SlotWidth(Slot s) => s.Separator ? SepW : s.Size + Gap * 2;
 
     Slot NewSlot(string key, string name, ImageSource? icon)
     {
-        var s = new Slot { Key = key, Name = name, Img = new Image { Source = icon, RenderTransform = new TranslateTransform() } };
+        var s = new Slot
+        {
+            Key = key, Name = name, Size = Base, Target = Base,
+            Img = new Image { Source = icon, RenderTransform = new TranslateTransform() },
+        };
         RenderOptions.SetBitmapScalingMode(s.Img, BitmapScalingMode.HighQuality);
         s.Img.MouseLeftButtonUp += (_, _) => Click(s);
         s.Img.MouseRightButtonUp += (_, e) => { ShowMenu(s); e.Handled = true; };
@@ -143,7 +217,7 @@ public partial class DockWindow : Window
         foreach (var s in slots)
         {
             var w = BaseWidth(s);
-            s.Target = s.Separator || double.IsNaN(mouseX) ? Base : Magnify(Math.Abs(mouseX - (x + w / 2)));
+            s.Target = s.Separator || double.IsNaN(mouseX) ? Base : Magnify(Math.Abs(mouseX - (x + w / 2)), Base, Max, Range);
             x += w;
         }
         if (animating) return;
@@ -197,7 +271,11 @@ public partial class DockWindow : Window
         var x = left + Pad;
         foreach (var s in slots)
         {
-            if (s.Separator) Place(s.Line!, x + SepW / 2, shelfTop + 12, 1, ShelfH - 24);
+            if (s.Separator)
+            {
+                Place(s.Line!, x + SepW / 2, shelfTop + 12, 1, ShelfH - 24);
+                Place(resizeHandle, x, shelfTop, SepW, ShelfH);
+            }
             else
             {
                 Place(s.Img!, x + Gap, height - BottomMargin - 9 - s.Size, s.Size, s.Size);

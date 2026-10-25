@@ -18,10 +18,11 @@ sealed class AppBar
 
     readonly Window window;
     readonly uint edge;
-    readonly double reserve, height;
+    readonly Func<double> reserve, height; // DIPs
     IntPtr hwnd;
+    RECT reserved;
 
-    public AppBar(Window window, uint edge, double reserve, double height)
+    public AppBar(Window window, uint edge, Func<double> reserve, Func<double> height)
     {
         (this.window, this.edge, this.reserve, this.height) = (window, edge, reserve, height);
         all.Add(this);
@@ -59,19 +60,29 @@ sealed class AppBar
         hwnd = IntPtr.Zero;
     }
 
-    void Position()
+    /// <summary>Re-reserves the screen strip and moves the window. Every maximized window resizes, so not per frame.</summary>
+    public void Position()
     {
         if (hwnd == IntPtr.Zero) return;
         var (bounds, scale) = PrimaryMonitor();
-        int r = (int)Math.Round(reserve * scale), h = (int)Math.Round(height * scale);
+        var r = (int)Math.Round(reserve() * scale);
         var d = Data();
         d.rc = bounds;
         if (edge == Top) d.rc.Bottom = d.rc.Top + r; else d.rc.Top = d.rc.Bottom - r;
         SHAppBarMessage(ABM_QUERYPOS, ref d);
         if (edge == Top) d.rc.Bottom = d.rc.Top + r; else d.rc.Top = d.rc.Bottom - r;
         SHAppBarMessage(ABM_SETPOS, ref d);
-        var top = edge == Top ? d.rc.Top : d.rc.Bottom - h;
-        SetWindowPos(hwnd, HWND_TOPMOST, d.rc.Left, top, d.rc.Right - d.rc.Left, h, SWP_NOACTIVATE);
+        reserved = d.rc;
+        Resize();
+    }
+
+    /// <summary>Fits the window to the current height without changing the reservation.</summary>
+    public void Resize()
+    {
+        if (hwnd == IntPtr.Zero) return;
+        var h = (int)Math.Round(height() * PrimaryMonitor().scale);
+        var top = edge == Top ? reserved.Top : reserved.Bottom - h;
+        SetWindowPos(hwnd, HWND_TOPMOST, reserved.Left, top, reserved.Right - reserved.Left, h, SWP_NOACTIVATE);
     }
 
     IntPtr Hook(IntPtr h, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -81,7 +92,7 @@ sealed class AppBar
             if (wParam == 1) Position(); // ABN_POSCHANGED
             else if (wParam == 2) window.Visibility = lParam != 0 ? Visibility.Hidden : Visibility.Visible; // ABN_FULLSCREENAPP
         }
-        else if (msg == TaskbarCreated)
+        else if (msg == TaskbarCreated && hwnd != IntPtr.Zero) // ignored once removed, so exit can't re-hide the taskbar
         {
             // Explorer restarted: it forgot our reservation and showed its taskbar again.
             Taskbar.Recheck();

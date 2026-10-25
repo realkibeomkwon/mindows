@@ -1,5 +1,7 @@
 using System.Windows;
 using System.Windows.Media;
+using ManagedShell;
+using ManagedShell.WindowsTray;
 using Microsoft.Win32;
 
 namespace Mindows;
@@ -7,6 +9,7 @@ namespace Mindows;
 public partial class App : Application
 {
     Mutex? instance;
+    static ShellManager? shell;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -15,6 +18,7 @@ public partial class App : Application
         if (e.Args.Contains("--restore"))
         {
             Taskbar.Restore();
+            Taskbar.BroadcastTaskbarCreated(); // tray icons were registered with our dead tray host
             Shutdown();
             return;
         }
@@ -31,22 +35,54 @@ public partial class App : Application
 
         ApplyTheme();
         var config = Config.Load();
+        // Hide first: the tray host takes over the Shell_TrayWnd class, and the state file must hold Explorer's state.
         Taskbar.Hide();
-        new MenuBarWindow().Show();
+        shell = StartTrayHost();
+        new MenuBarWindow(shell?.NotificationArea).Show();
         new DockWindow(config).Show();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        Teardown();
+        base.OnExit(e);
+    }
+
+    /// <summary>
+    /// Makes Mindows the notification area host, so apps add their tray icons to the menu bar.
+    /// App bar messages it does not handle are forwarded to Explorer.
+    /// </summary>
+    static ShellManager? StartTrayHost()
+    {
+        var config = ShellManager.DefaultShellConfig;
+        config.EnableTasksService = false;
+        config.PinnedNotifyIcons = new[] { NotificationArea.NETWORK_GUID, NotificationArea.VOLUME_GUID };
+        try { return new ShellManager(config); }
+        catch (Exception e) // the bars still work without tray icons
+        {
+            Log(e);
+            return null;
+        }
+    }
+
+    static void Teardown()
+    {
+        // Dispose first so app bar and taskbar messages go straight to Explorer; it also re-announces Explorer's tray.
+        try { shell?.Dispose(); }
+        catch (Exception e) { Log(e); } // restoring the taskbar below matters more
+        shell = null;
         AppBar.RemoveAll();
         Taskbar.Restore();
-        base.OnExit(e);
     }
 
     static void Crash(object error)
     {
-        AppBar.RemoveAll();
-        Taskbar.Restore();
+        Teardown();
+        Log(error);
+    }
+
+    static void Log(object error)
+    {
         try { File.AppendAllText(Path.Combine(Config.Dir, "crash.log"), $"{DateTime.Now:O} {error}\n\n"); }
         catch (IOException) { }
     }

@@ -16,13 +16,22 @@ public class Config
         System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Mindows")).FullName;
     static string FilePath => System.IO.Path.Combine(Dir, "config.json");
 
+    public const double MinIconSize = 24, MaxIconSize = 96;
+
     public List<PinnedApp> Pinned { get; set; } = new();
+    /// <summary>Dock icon size at rest, in DIPs.</summary>
+    public double DockIconSize { get; set; } = 48;
+    public bool DockMagnification { get; set; } = true;
 
     public static Config Load()
     {
         try
         {
-            if (File.Exists(FilePath)) return JsonSerializer.Deserialize<Config>(File.ReadAllText(FilePath)) ?? new();
+            if (File.Exists(FilePath) && JsonSerializer.Deserialize<Config>(File.ReadAllText(FilePath)) is { } loaded)
+            {
+                loaded.DockIconSize = Math.Clamp(loaded.DockIconSize, MinIconSize, MaxIconSize); // hand-edited file
+                return loaded;
+            }
         }
         catch (JsonException) { File.Move(FilePath, FilePath + ".bad", true); }
 

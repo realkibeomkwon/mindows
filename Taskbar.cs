@@ -10,12 +10,9 @@ static class Taskbar
     // Original auto-hide state, written before we change it so `--restore` works after a crash or kill.
     static string StateFile => Path.Combine(Config.Dir, "taskbar-state.txt");
 
-    public static bool Peeking { get; private set; }
-
     public static void Hide()
     {
-        Peeking = false;
-        var tray = FindWindow("Shell_TrayWnd", null);
+        var tray = ExplorerTray();
         if (tray == IntPtr.Zero) return;
         if (!File.Exists(StateFile)) File.WriteAllText(StateFile, GetState(tray).ToString());
         // A hidden taskbar still reserves its work area unless auto-hide is on.
@@ -25,28 +22,38 @@ static class Taskbar
 
     public static void Restore()
     {
-        var tray = FindWindow("Shell_TrayWnd", null);
+        var tray = ExplorerTray();
         if (tray == IntPtr.Zero) return; // Explorer not running; keep the state file for later.
         if (File.Exists(StateFile) && int.TryParse(File.ReadAllText(StateFile), out var state)) SetState(tray, state);
         foreach (var h in TrayWindows()) ShowWindow(h, SW_SHOW);
         File.Delete(StateFile);
     }
 
-    public static void Peek()
-    {
-        Restore();
-        Peeking = true;
-    }
-
     /// <summary>Explorer re-shows the taskbar on its own (restart, some notifications).</summary>
     public static void Recheck()
     {
-        if (!Peeking && TrayWindows().Any(IsWindowVisible)) Hide();
+        if (TrayWindows().Any(IsWindowVisible)) Hide();
+    }
+
+    /// <summary>Asks every app to re-add its tray icons, e.g. to Explorer after our tray host died.</summary>
+    public static void BroadcastTaskbarCreated() =>
+        PostMessage(new IntPtr(0xFFFF) /* HWND_BROADCAST */, RegisterWindowMessage("TaskbarCreated"), IntPtr.Zero, IntPtr.Zero);
+
+    /// <summary>Explorer's taskbar; our tray host registers a window of the same class.</summary>
+    static IntPtr ExplorerTray()
+    {
+        for (var h = FindWindowEx(IntPtr.Zero, IntPtr.Zero, "Shell_TrayWnd", null); h != IntPtr.Zero;
+             h = FindWindowEx(IntPtr.Zero, h, "Shell_TrayWnd", null))
+        {
+            GetWindowThreadProcessId(h, out var pid);
+            if (pid != Environment.ProcessId) return h;
+        }
+        return IntPtr.Zero;
     }
 
     static IEnumerable<IntPtr> TrayWindows()
     {
-        var tray = FindWindow("Shell_TrayWnd", null);
+        var tray = ExplorerTray();
         if (tray != IntPtr.Zero) yield return tray;
         for (var h = FindWindowEx(IntPtr.Zero, IntPtr.Zero, "Shell_SecondaryTrayWnd", null); h != IntPtr.Zero;
              h = FindWindowEx(IntPtr.Zero, h, "Shell_SecondaryTrayWnd", null))

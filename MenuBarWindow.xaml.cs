@@ -1,9 +1,15 @@
+using System.ComponentModel;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using ManagedShell.Common.Helpers;
+using ManagedShell.Interop;
+using ManagedShell.WindowsTray;
 using static Mindows.Native;
 
 namespace Mindows;
@@ -17,10 +23,11 @@ public partial class MenuBarWindow : Window
     IntPtr foreground;
     AppInfo? foregroundApp;
 
-    public MenuBarWindow()
+    public MenuBarWindow(NotificationArea? tray)
     {
         InitializeComponent();
-        _ = new AppBar(this, AppBar.Top, BarHeight, BarHeight);
+        _ = new AppBar(this, AppBar.Top, () => BarHeight, () => BarHeight);
+        if (tray != null) TrayIcons.ItemsSource = TrayView(tray);
 
         foregroundHook = (_, _, h, idObject, _, _, _) => { if (idObject == 0) OnForeground(h); };
         SetWinEventHook(3, 3, IntPtr.Zero, foregroundHook, 0, 0, 0); // EVENT_SYSTEM_FOREGROUND, out of context
@@ -80,26 +87,60 @@ public partial class MenuBarWindow : Window
             Menus.Item("화면 잠금", () => LockWorkStation()),
             Menus.Item("로그아웃...", () => { if (Sys.Confirm("로그아웃하시겠습니까?")) ExitWindowsEx(0, 0); }),
             null,
-            Menus.Item("Windows 작업 표시줄 보기", ToggleTaskbar, isChecked: Taskbar.Peeking),
             Menus.Item("Mindows 종료", () => Application.Current.Shutdown()),
         });
     }
 
-    /// <summary>Gives temporary access to the system tray, which Mindows does not replace.</summary>
-    static void ToggleTaskbar()
+    /// <summary>Visible tray icons, app icons first and the pinned system icons (network, volume) next to the clock.</summary>
+    static ListCollectionView TrayView(NotificationArea tray)
     {
-        var dock = Application.Current.Windows.OfType<DockWindow>().First();
-        if (Taskbar.Peeking)
+        var power = new Guid(NotificationArea.POWER_GUID); // the menu bar draws its own battery
+        var view = new ListCollectionView(tray.TrayIcons)
         {
-            Taskbar.Hide();
-            dock.Visibility = Visibility.Visible;
-        }
-        else
-        {
-            Taskbar.Peek();
-            dock.Visibility = Visibility.Hidden;
-        }
+            Filter = o => o is NotifyIcon { IsHidden: false } icon && icon.GUID != power,
+            IsLiveFiltering = true,
+            IsLiveSorting = true,
+        };
+        view.LiveFilteringProperties.Add(nameof(NotifyIcon.IsHidden));
+        view.SortDescriptions.Add(new(nameof(NotifyIcon.IsPinned), ListSortDirection.Ascending));
+        view.SortDescriptions.Add(new(nameof(NotifyIcon.PinOrder), ListSortDirection.Ascending));
+        view.LiveSortingProperties.Add(nameof(NotifyIcon.IsPinned));
+        view.LiveSortingProperties.Add(nameof(NotifyIcon.PinOrder));
+        return view;
     }
+
+    static NotifyIcon TrayIcon(object sender) => (NotifyIcon)((FrameworkElement)sender).DataContext;
+
+    void Tray_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        TrayIcon(sender).IconMouseDown(e.ChangedButton, MouseHelper.GetCursorPositionParam(), GetDoubleClickTime());
+        e.Handled = true;
+    }
+
+    void Tray_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        TrayIcon(sender).IconMouseUp(e.ChangedButton, MouseHelper.GetCursorPositionParam(), GetDoubleClickTime());
+        e.Handled = true;
+    }
+
+    void Tray_MouseEnter(object sender, MouseEventArgs e)
+    {
+        var element = (FrameworkElement)sender;
+        var icon = TrayIcon(sender);
+        // Apps place their flyouts next to this rect (Shell_NotifyIconGetRect); physical pixels.
+        var topLeft = element.PointToScreen(new Point(0, 0));
+        var bottomRight = element.PointToScreen(new Point(element.ActualWidth, element.ActualHeight));
+        icon.Placement = new NativeMethods.Rect
+        {
+            Left = (int)topLeft.X, Top = (int)topLeft.Y, Right = (int)bottomRight.X, Bottom = (int)bottomRight.Y,
+        };
+        // Version 4 icons draw their own tooltip; older ones expect the host to show the tip text.
+        element.ToolTip = icon.Version >= 4 ? null : icon.Title;
+        icon.IconMouseEnter(MouseHelper.GetCursorPositionParam());
+    }
+
+    void Tray_MouseLeave(object sender, MouseEventArgs e) => TrayIcon(sender).IconMouseLeave(MouseHelper.GetCursorPositionParam());
+    void Tray_MouseMove(object sender, MouseEventArgs e) => TrayIcon(sender).IconMouseMove(MouseHelper.GetCursorPositionParam());
 
     void App_Click(object sender, RoutedEventArgs e)
     {
