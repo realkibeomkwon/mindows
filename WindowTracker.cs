@@ -63,6 +63,15 @@ static class WindowTracker
                 return new(frameKey, exe, names.GetValueOrDefault(frameKey) ?? WindowText(h));
             }
         }
+        // Chrome's installed web apps run in the browser's process but tag their windows with the app ID of their
+        // Start menu shortcut; plain browser windows carry a profile ID that no shortcut has, so they stay with chrome.exe.
+        if (aumid == null && Path.GetFileName(exe).Equals("chrome.exe", StringComparison.OrdinalIgnoreCase)
+            && WindowAumid(h) is { } webApp && webApp.Contains("._crx_"))
+        {
+            var appKey = Config.AppsFolder + webApp;
+            if (!names.TryGetValue(appKey, out var appName)) names[appKey] = appName = ShellItemName(appKey) ?? WindowText(h);
+            return new(appKey, exe, appName);
+        }
         var key = aumid != null ? Config.AppsFolder + aumid : exe;
         return new(key, exe, NameOf(key, exe));
     }

@@ -47,7 +47,8 @@
 
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="0,0,8,0">
             <!-- Tray icons hosted by Mindows; mouse input is forwarded to the owning app. -->
-            <ItemsControl x:Name="TrayIcons" VerticalAlignment="Stretch">
+            <ItemsControl x:Name="TrayIcons" VerticalAlignment="Stretch" MouseMove="TrayIcons_MouseMove"
+                          MouseLeftButtonUp="TrayIcons_MouseUp" LostMouseCapture="TrayIcons_LostMouseCapture">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <StackPanel Orientation="Horizontal"/>
@@ -76,7 +77,6 @@
             </ItemsControl>
             <Button x:Name="BatteryButton" Style="{StaticResource BarButton}" Click="Battery_Click">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock x:Name="BatteryText" Margin="0,0,6,0" VerticalAlignment="Center"/>
                     <Border Width="23" Height="11" BorderThickness="1" CornerRadius="3" Padding="1.5"
                             BorderBrush="{DynamicResource BarFg}" VerticalAlignment="Center">
                         <Border x:Name="BatteryFill" HorizontalAlignment="Left" CornerRadius="1.5"
@@ -84,13 +84,11 @@
                     </Border>
                     <Border Width="1.5" Height="4" Margin="1,0,0,0" CornerRadius="0,1,1,0" Opacity="0.6"
                             Background="{DynamicResource BarFg}" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="BatteryText" Margin="6,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
             <Button Style="{StaticResource BarButton}" Click="Control_Click" ToolTip="빠른 설정">
                 <TextBlock Style="{StaticResource Glyph}" Text="&#xE713;"/>
-            </Button>
-            <Button Style="{StaticResource BarButton}" Click="Search_Click" ToolTip="검색">
-                <TextBlock Style="{StaticResource Glyph}" Text="&#xE721;"/>
             </Button>
             <Button Style="{StaticResource BarButton}" Click="Clock_Click">
                 <TextBlock x:Name="Clock"/>

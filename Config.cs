@@ -25,6 +25,8 @@ public class Config
     public bool DockAutoHide { get; set; }
     /// <summary>Slide the auto-hiding dock out and in; off, it disappears and appears at once.</summary>
     public bool DockAutoHideAnimation { get; set; } = true;
+    /// <summary>Tray icon identifiers in menu bar order, set by Ctrl+dragging; null keeps network and volume next to the clock.</summary>
+    public string[]? TrayOrder { get; set; }
 
     public static Config Load()
     {

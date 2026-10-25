@@ -69,6 +69,7 @@ static class Native
     [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
     [DllImport("user32.dll")] public static extern bool LockWorkStation();
     [DllImport("user32.dll")] public static extern int GetDoubleClickTime();
+    [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vk);
     [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(long point);
     [DllImport("user32.dll")] public static extern IntPtr SetWindowsHookEx(int id, HookProc proc, IntPtr module, uint threadId);
     [DllImport("user32.dll")] public static extern bool UnhookWindowsHookEx(IntPtr hook);
@@ -117,10 +118,10 @@ static class Native
     }
 
     /// <summary>
-    /// First row, in window pixels, where another process's window draws anything down its center column.
-    /// Captured with PW_RENDERFULLCONTENT, its transparent parts come out black.
+    /// Top edge, in window pixels, of what another process's window draws down its center column, or with
+    /// <paramref name="bottom"/> its bottom edge. Captured with PW_RENDERFULLCONTENT, its transparent parts come out black.
     /// </summary>
-    public static int? ContentTop(IntPtr h)
+    public static int? ContentEdge(IntPtr h, bool bottom)
     {
         GetWindowRect(h, out var r);
         // Only the left half up to the center column is captured: the cost scales with the area, and PrintWindow ignores a viewport offset.
@@ -133,8 +134,11 @@ static class Native
         try
         {
             if (bmp == IntPtr.Zero || !PrintWindow(h, dc, 2)) return null;
-            for (var y = 0; y < height; y++)
-                if ((Marshal.ReadInt32(bits, (y * w + w - 1) * 4) & 0xFFFFFF) != 0) return y;
+            for (var i = 0; i < height; i++)
+            {
+                var y = bottom ? height - 1 - i : i;
+                if ((Marshal.ReadInt32(bits, (y * w + w - 1) * 4) & 0xFFFFFF) != 0) return bottom ? y + 1 : y;
+            }
             return null;
         }
         finally
@@ -202,6 +206,26 @@ static class Native
             finally { PropVariantClear(ref value); }
         }
         finally { Marshal.ReleaseComObject(store); }
+    }
+
+    [ComImport, Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IShellItem
+    {
+        void BindToHandler(); // never called; keeps GetDisplayName in its vtable slot
+        void GetParent();
+        [PreserveSig] int GetDisplayName(uint sigdn, [MarshalAs(UnmanagedType.LPWStr)] out string name);
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    static extern int SHCreateItemFromParsingName(string path, IntPtr bindCtx, ref Guid iid, [MarshalAs(UnmanagedType.Interface)] out IShellItem item);
+
+    /// <summary>Display name of a shell item, e.g. an installed web app's name for its shell:AppsFolder path.</summary>
+    public static string? ShellItemName(string path)
+    {
+        var iid = typeof(IShellItem).GUID;
+        if (SHCreateItemFromParsingName(path, IntPtr.Zero, ref iid, out var item) != 0) return null;
+        try { return item.GetDisplayName(0, out var name) == 0 ? name : null; } // SIGDN_NORMALDISPLAY
+        finally { Marshal.ReleaseComObject(item); }
     }
 
     public static string WindowText(IntPtr h)

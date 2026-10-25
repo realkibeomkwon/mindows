@@ -38,9 +38,9 @@ public partial class App : Application
         var config = Config.Load();
         // Hide first: the tray host takes over the Shell_TrayWnd class, and the state file must hold Explorer's state.
         Taskbar.Hide();
-        shell = StartTrayHost();
+        shell = StartTrayHost(config.TrayOrder);
         var dock = new DockWindow(config);
-        new MenuBarWindow(shell?.NotificationArea, () => SettingsWindow.Open(config, dock)).Show();
+        new MenuBarWindow(shell?.NotificationArea, config, dock, () => SettingsWindow.Open(config, dock)).Show();
         dock.Show();
     }
 
@@ -54,11 +54,11 @@ public partial class App : Application
     /// Makes Mindows the notification area host, so apps add their tray icons to the menu bar.
     /// App bar messages it does not handle are forwarded to Explorer.
     /// </summary>
-    static ShellManager? StartTrayHost()
+    static ShellManager? StartTrayHost(string[]? trayOrder)
     {
         var config = ShellManager.DefaultShellConfig;
         config.EnableTasksService = false;
-        config.PinnedNotifyIcons = new[] { NotificationArea.NETWORK_GUID, NotificationArea.VOLUME_GUID };
+        config.PinnedNotifyIcons = trayOrder ?? new[] { NotificationArea.NETWORK_GUID, NotificationArea.VOLUME_GUID };
         try { return new ShellManager(config); }
         catch (Exception e) // the bars still work without tray icons
         {

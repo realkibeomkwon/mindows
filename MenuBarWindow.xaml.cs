@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
@@ -25,20 +26,33 @@ public partial class MenuBarWindow : Window
     AppInfo? foregroundApp;
 
     readonly Action openSettings;
+    readonly Config config;
+    readonly DockWindow dock;
+    readonly NotificationArea? tray;
+    NotifyIcon? movingIcon; // tray icon being Ctrl+dragged to a new spot
 
-    // Quick Settings and Search open over Explorer's hidden taskbar at the bottom; while one is open, keep it under the menu bar.
+    // Quick Settings and Search open over Explorer's hidden taskbar at the bottom; while one is open, keep Quick Settings
+    // under the menu bar and Search, opened from the dock, just above the dock.
     const double FlyoutGap = 6;
     readonly WinEventProc shownHook;
     readonly DispatcherTimer flyoutTimer = new();
-    readonly Dictionary<IntPtr, int> flyoutTops = new(); // last panel top found in each flyout window
+    readonly Dictionary<IntPtr, int> flyoutEdges = new(); // last panel edge found in each flyout window: Search's bottom, else the top
     IntPtr flyout;
     int? parkedY;  // the shell's own y for a flyout parked above the screen until its panel is found
     long parkedAt;
-    IntPtr search; // Search's window, kept under the menu bar while closed
+    IntPtr search; // Search's window, kept above the dock while closed
 
-    public MenuBarWindow(NotificationArea? tray, Action openSettings)
+    static MenuBarWindow()
     {
-        this.openSettings = openSettings;
+        var order = new[] { "new", "a", "hidden", "B" };
+        Debug.Assert(string.Join(",", MoveBefore(order, "b", "a")) == "new,b,a,hidden"
+            && string.Join(",", MoveBefore(order, "a", null)) == "new,hidden,B,a",
+            "a moved tray icon must land before its new neighbor without moving icons that aren't shown");
+    }
+
+    public MenuBarWindow(NotificationArea? tray, Config config, DockWindow dock, Action openSettings)
+    {
+        (this.tray, this.config, this.dock, this.openSettings) = (tray, config, dock, openSettings);
         InitializeComponent();
         _ = new AppBar(this, AppBar.Top, () => BarHeight, () => BarHeight);
         if (tray != null) TrayIcons.ItemsSource = TrayView(tray);
@@ -68,36 +82,36 @@ public partial class MenuBarWindow : Window
         AppName.Text = app.Name;
     }
 
-    // Notification Center already starts under the menu bar, and its calendar can't be moved on its own.
-    static bool IsBottomFlyout(IntPtr h) => ClassName(h) == "ControlCenterWindow" /* Quick Settings */ || IsSearch(h);
-
-    static bool IsSearch(IntPtr h) => ClassName(h) == "Windows.UI.Core.CoreWindow" && GetWindowThreadProcessId(h, out var pid) != 0
+    internal static bool IsSearch(IntPtr h) => ClassName(h) == "Windows.UI.Core.CoreWindow" && GetWindowThreadProcessId(h, out var pid) != 0
         && string.Equals(Path.GetFileName(QueryProcess(pid).exe), "SearchHost.exe", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Moves the closed Search window under the menu bar, so it opens there: it keeps its spot between openings, but
-    /// the shell puts it back at the bottom (e.g. when the work area changes), and its first frame shows before any event.
+    /// Moves the closed Search window above the dock, so it opens there: it keeps its spot between openings, but
+    /// the shell puts it back over the taskbar (e.g. when the work area changes), and its first frame shows before any event.
     /// Quick Settings is placed afresh at every opening, so only Search can be readied this way.
     /// </summary>
     void ReadySearch()
     {
-        if (!IsVisible) return; // the menu bar isn't in place yet
+        if (!IsVisible || !dock.IsVisible) return; // the bars aren't in place yet
         if (!IsWindow(search)) search = AllTopLevelWindows().FirstOrDefault(IsSearch);
         if (search == IntPtr.Zero || search == flyout || IsShown(search)) return;
-        if (!flyoutTops.TryGetValue(search, out var top))
+        if (!flyoutEdges.TryGetValue(search, out var edge))
         {
-            if (ContentTop(search) is not { } found) return; // a cloaked window still captures its last frame
-            flyoutTops[search] = top = found;
+            if (PanelEdge(search) is not { } found) return; // a cloaked window still captures its last frame
+            flyoutEdges[search] = edge = found;
         }
-        MoveFlyout(search, top);
+        MoveFlyout(search, edge);
     }
 
     void WatchFlyout(IntPtr h)
     {
-        if (h == flyout || !IsBottomFlyout(h)) return;
+        if (h == flyout) return;
+        // Notification Center already starts under the menu bar, and its calendar can't be moved on its own.
+        if (IsSearch(h)) search = h;
+        else if (ClassName(h) != "ControlCenterWindow") return; // Quick Settings
         flyout = h;
-        // The shell reuses the window, so last time's panel top moves it at once; capturing takes a few frames.
-        if (flyoutTops.TryGetValue(h, out var top)) MoveFlyout(h, top);
+        // The shell reuses the window, so last time's panel edge moves it at once; capturing takes a few frames.
+        if (flyoutEdges.TryGetValue(h, out var edge)) MoveFlyout(h, edge);
         else
         {
             // First sight: park it above the screen until its panel is found, instead of showing it at the bottom first.
@@ -110,11 +124,11 @@ public partial class MenuBarWindow : Window
     }
 
     // Closed, Quick Settings is hidden and Search is cloaked.
-    static bool IsShown(IntPtr h) => IsWindowVisible(h) && DwmGetWindowAttribute(h, 14, out var cloaked, sizeof(int)) == 0 && cloaked == 0; // DWMWA_CLOAKED
+    internal static bool IsShown(IntPtr h) => IsWindowVisible(h) && DwmGetWindowAttribute(h, 14, out var cloaked, sizeof(int)) == 0 && cloaked == 0; // DWMWA_CLOAKED
 
     /// <summary>
-    /// Moves the flyout so its panel's top edge sits just under the menu bar, keeping its x. Quick Settings
-    /// grows upward (e.g. the Wi-Fi list), so this runs until the flyout closes.
+    /// Moves the flyout so its panel sits just under the menu bar, or Search's just above the dock, keeping its x.
+    /// Quick Settings grows upward (e.g. the Wi-Fi list), so this runs until the flyout closes.
     /// </summary>
     void PlaceFlyout()
     {
@@ -126,17 +140,17 @@ public partial class MenuBarWindow : Window
             return;
         }
         // Until the panel is drawn, retry every frame.
-        var top = ContentTop(flyout);
-        flyoutTimer.Interval = TimeSpan.FromMilliseconds(top == null ? 16 : 100);
-        if (top == null)
+        var edge = PanelEdge(flyout);
+        flyoutTimer.Interval = TimeSpan.FromMilliseconds(edge == null ? 16 : 100);
+        if (edge == null)
         {
             // Never leave it out of sight: if the capture keeps failing, give the shell's own spot back.
             if (Environment.TickCount64 - parkedAt > 500) Unpark();
             return;
         }
         parkedY = null;
-        flyoutTops[flyout] = top.Value;
-        MoveFlyout(flyout, top.Value);
+        flyoutEdges[flyout] = edge.Value;
+        MoveFlyout(flyout, edge.Value);
     }
 
     void Unpark()
@@ -147,12 +161,17 @@ public partial class MenuBarWindow : Window
         parkedY = null;
     }
 
-    /// <summary>Moves a flyout so its panel top, <paramref name="top"/> pixels into the window, sits under the menu bar.</summary>
-    void MoveFlyout(IntPtr h, int top)
+    // Search lines up its bottom with the dock, the others their top with the menu bar.
+    int? PanelEdge(IntPtr h) => ContentEdge(h, bottom: h == search);
+
+    /// <summary>Moves a flyout so its panel edge, <paramref name="edge"/> pixels into the window, sits by the menu bar or the dock.</summary>
+    void MoveFlyout(IntPtr h, int edge)
     {
+        if (h == search && !dock.IsVisible) return;
         GetWindowRect(h, out var r);
         GetWindowRect(new WindowInteropHelper(this).Handle, out var bar);
-        var y = bar.Bottom + (int)Math.Round(FlyoutGap * PrimaryMonitor().scale) - top;
+        var gap = (int)Math.Round(FlyoutGap * PrimaryMonitor().scale);
+        var y = h == search ? dock.ShelfTop - gap - edge : bar.Bottom + gap - edge;
         if (y != r.Top) SetWindowPos(h, IntPtr.Zero, r.Left, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
@@ -221,8 +240,19 @@ public partial class MenuBarWindow : Window
 
     static NotifyIcon TrayIcon(object sender) => (NotifyIcon)((FrameworkElement)sender).DataContext;
 
+    // The bar never takes focus, so WPF's own modifier state can be stale.
+    static bool CtrlDown => (GetAsyncKeyState(0x11) & 0x8000) != 0; // VK_CONTROL
+
     void Tray_MouseDown(object sender, MouseButtonEventArgs e)
     {
+        // As Cmd+drag on macOS: Ctrl+drag moves the icon instead of clicking it.
+        if (tray != null && e.ChangedButton == MouseButton.Left && CtrlDown)
+        {
+            movingIcon = TrayIcon(sender);
+            TrayIcons.CaptureMouse(); // not the icon's own element, which re-sorting can take out of the tree
+            e.Handled = true;
+            return;
+        }
         TrayIcon(sender).IconMouseDown(e.ChangedButton, MouseHelper.GetCursorPositionParam(), GetDoubleClickTime());
         e.Handled = true;
     }
@@ -235,6 +265,7 @@ public partial class MenuBarWindow : Window
 
     void Tray_MouseEnter(object sender, MouseEventArgs e)
     {
+        if (movingIcon != null) return;
         var element = (FrameworkElement)sender;
         var icon = TrayIcon(sender);
         // Apps place their flyouts next to this rect (Shell_NotifyIconGetRect); physical pixels.
@@ -250,7 +281,47 @@ public partial class MenuBarWindow : Window
     }
 
     void Tray_MouseLeave(object sender, MouseEventArgs e) => TrayIcon(sender).IconMouseLeave(MouseHelper.GetCursorPositionParam());
-    void Tray_MouseMove(object sender, MouseEventArgs e) => TrayIcon(sender).IconMouseMove(MouseHelper.GetCursorPositionParam());
+    void Tray_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (movingIcon == null) TrayIcon(sender).IconMouseMove(MouseHelper.GetCursorPositionParam());
+    }
+
+    /// <summary>Moves the dragged icon before the first other icon right of the pointer; all shown icons become pinned in that order.</summary>
+    void TrayIcons_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (movingIcon is not { } moving) return;
+        var x = e.GetPosition(TrayIcons).X;
+        var icons = TrayIcons.Items.Cast<NotifyIcon>().ToList();
+        var next = icons.FirstOrDefault(i => i != moving && TrayIcons.ItemContainerGenerator.ContainerFromItem(i) is FrameworkElement c
+            && c.TranslatePoint(new Point(c.ActualWidth / 2, 0), TrayIcons).X > x);
+        if (next == icons.ElementAtOrDefault(icons.IndexOf(moving) + 1)) return;
+        // Unpinned icons are shown left of the pinned ones. A saved identifier can hold an old title, so take the icon's current one.
+        var order = icons.Where(i => !i.IsPinned).Select(i => i.Identifier)
+            .Concat(tray!.PinnedNotifyIcons.Select(p => icons.FirstOrDefault(i => i.IsEqualByIdentifier(p))?.Identifier ?? p));
+        tray.SetPinnedIcons(MoveBefore(order, moving.Identifier, next?.Identifier));
+    }
+
+    void TrayIcons_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (movingIcon != null) TrayIcons.ReleaseMouseCapture(); // ends the move in LostMouseCapture
+    }
+
+    void TrayIcons_LostMouseCapture(object sender, MouseEventArgs e)
+    {
+        if (movingIcon == null) return;
+        movingIcon = null;
+        config.TrayOrder = tray!.PinnedNotifyIcons;
+        config.Save();
+    }
+
+    /// <summary>The order with id moved to just before next, or to the end; the other entries keep their order.</summary>
+    static string[] MoveBefore(IEnumerable<string> order, string id, string? next)
+    {
+        var list = order.Where(x => !x.Equals(id, StringComparison.OrdinalIgnoreCase)).ToList();
+        var at = next == null ? -1 : list.FindIndex(x => x.Equals(next, StringComparison.OrdinalIgnoreCase));
+        list.Insert(at < 0 ? list.Count : at, id);
+        return list.ToArray();
+    }
 
     void App_Click(object sender, RoutedEventArgs e)
     {
@@ -289,6 +360,5 @@ public partial class MenuBarWindow : Window
 
     void Battery_Click(object sender, RoutedEventArgs e) => Sys.Launch("ms-settings:batterysaver");
     void Control_Click(object sender, RoutedEventArgs e) => Sys.WinKey('A');
-    void Search_Click(object sender, RoutedEventArgs e) => Sys.WinKey('S');
     void Clock_Click(object sender, RoutedEventArgs e) => Sys.WinKey('N');
 }
