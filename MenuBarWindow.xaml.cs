@@ -2,6 +2,8 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Net.NetworkInformation;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -235,10 +237,61 @@ public partial class MenuBarWindow : Window
         if (y != r.Top) SetWindowPos(h, IntPtr.Zero, r.Left, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
+    /// <summary>Where UsageBar, a separate app, publishes AI usage for the menu bar; its README has the format.</summary>
+    static readonly string UsagePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "UsageBar", "status.json");
+    JsonNode? usage;
+    DateTime usageWrite;
+
+    sealed record UsageItem(int Index, Geometry? Logo, string Text, string Tip, double Opacity);
+
+    /// <summary>An item per provider in UsageBar's file: its mark and the percentage left, dimmed when its last refresh failed.</summary>
+    void UpdateUsage()
+    {
+        var write = File.GetLastWriteTimeUtc(UsagePath); // 1601 when there is none
+        // UsageBar rewrites it every 5 minutes and deletes it on exit; an older one was left behind by a crash.
+        if (DateTime.UtcNow - write > TimeSpan.FromMinutes(15)) write = default;
+        if (write == usageWrite) return;
+        List<UsageItem>? items = null;
+        try
+        {
+            usage = write == default ? null : JsonNode.Parse(File.ReadAllText(UsagePath));
+            items = usage?["providers"]?.AsArray().Select((p, i) => p == null ? null : new UsageItem(i, Logo((string?)p["logo"]),
+                    p["remainingPercent"] is { } left ? $"{(double)left:0}%" : "–",
+                    $"{p["name"]}: {(string?)p["error"] ?? (p["remainingPercent"] is { } l ? $"{(double)l:0}% 남음" : "사용량 없음")}",
+                    p["error"] == null ? 1 : 0.5))
+                .OfType<UsageItem>().ToList();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return; } // being replaced or deleted; read it on the next tick
+        catch (Exception e) when (e is JsonException or InvalidOperationException or FormatException) { usage = null; } // not UsageBar's format
+        usageWrite = write;
+        UsageItems.ItemsSource = items;
+    }
+
+    static Geometry? Logo(string? data)
+    {
+        if (data == null) return null;
+        var logo = Geometry.Parse(data);
+        logo.Freeze();
+        return logo;
+    }
+
+    void Usage_Click(object sender, RoutedEventArgs e)
+    {
+        if (usage?["pid"] is not JsonValue pidValue || !pidValue.TryGetValue<uint>(out var pid)
+            || usage["hwnd"] is not JsonValue hwndValue || !hwndValue.TryGetValue<long>(out var hwnd)) return;
+        var item = (FrameworkElement)sender;
+        var at = item.PointToScreen(new Point(0, item.ActualHeight)); // the popup's top left, in pixels
+        // The bar never takes focus, so let UsageBar bring its popup to the front.
+        AllowSetForegroundWindow(pid);
+        PostMessage((IntPtr)hwnd, RegisterWindowMessage("UsageBar.ShowPopup"), ((UsageItem)item.DataContext).Index,
+            (IntPtr)(((int)at.Y << 16) | ((int)at.X & 0xFFFF)));
+    }
+
     void Tick()
     {
         ReadySearch();
         UpdateNetwork();
+        UpdateUsage();
         // A UWP frame gets its app child only after it comes to the front, so resolve again.
         OnForeground(GetForegroundWindow());
         Clock.Text = DateTime.Now.ToString("M월 d일 (ddd) tt h:mm", Korean);
@@ -287,7 +340,9 @@ public partial class MenuBarWindow : Window
         var power = new Guid(NotificationArea.POWER_GUID); // the menu bar draws its own battery
         var view = new ListCollectionView(tray.TrayIcons)
         {
-            Filter = o => o is NotifyIcon { IsHidden: false } icon && icon.GUID != power,
+            // UsageBar's own icons too: the menu bar shows its usage as items.
+            Filter = o => o is NotifyIcon { IsHidden: false } icon && icon.GUID != power
+                && !string.Equals(Path.GetFileName(icon.Path), "UsageBar.exe", StringComparison.OrdinalIgnoreCase),
             IsLiveFiltering = true,
             IsLiveSorting = true,
         };

@@ -55,6 +55,25 @@
         </StackPanel>
 
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="0,0,8,0">
+            <!-- AI usage from UsageBar, a separate app: each provider's mark and the percentage left; clicks open its popup. -->
+            <ItemsControl x:Name="UsageItems" VerticalAlignment="Stretch">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Style="{StaticResource BarButton}" Click="Usage_Click" ToolTip="{Binding Tip}" Opacity="{Binding Opacity}">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Data="{Binding Logo}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource BarFg}"
+                                      VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding Text}" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
             <!-- Tray icons hosted by Mindows; mouse input is forwarded to the owning app. -->
             <ItemsControl x:Name="TrayIcons" VerticalAlignment="Stretch" MouseMove="TrayIcons_MouseMove"
                           MouseLeftButtonUp="TrayIcons_MouseUp" LostMouseCapture="TrayIcons_LostMouseCapture">

@@ -24,6 +24,7 @@ dotnet run -c Release -- --restore
 - 윈도우 메뉴: 최소화, 확대/축소, 닫기, 앱의 창 목록
 - 오른쪽: 트레이 아이콘, 배터리, 빠른 설정(Win+A), 검색(Win+S), 시계(Win+N 알림 센터)
 - 트레이 아이콘: Mindows가 알림 영역 호스트 역할을 맡아([ManagedShell](https://github.com/cairoshell/ManagedShell)), 앱의 트레이 아이콘을 메뉴 바에 표시합니다. 클릭과 우클릭은 해당 앱으로 전달됩니다. 네트워크와 볼륨 아이콘은 시계 쪽에 고정됩니다.
+- AI 사용량: 별도 앱인 [UsageBar](../usagebar)가 실행 중이면, 트레이 아이콘 왼쪽에 공급자(Claude, Codex, Grok)별 로고와 남은 사용량(%)을 표시합니다. 마지막 갱신에 실패한 항목은 흐리게 표시되며, 항목을 클릭하면 UsageBar의 상세 팝업이 열립니다. 이때 UsageBar 자체의 트레이 아이콘은 메뉴 바에 표시하지 않습니다.
 
 **Dock**
 - 고정 앱과 실행 중인 앱, 실행 표시 점, 휴지통
