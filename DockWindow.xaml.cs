@@ -480,6 +480,7 @@ public partial class DockWindow : Window
         // Off the dock, an icon that can't be removed waits in its old spot.
         MoveTo(s, remove ? slots.IndexOf(s) : off ? homeIndex : DropIndex(p.X));
         RemoveLabel.Visibility = remove ? Visibility.Visible : Visibility.Collapsed;
+        RemoveShape.Data ??= TagShape(RemoveText);
         s.Dot!.Opacity = remove ? 0 : 1;
 
         ghostAt = new Point(p.X - grab.X, p.Y - grab.Y);

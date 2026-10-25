@@ -23,11 +23,10 @@
             <Popup x:Name="Ghost" AllowsTransparency="True" Placement="Relative" PlacementTarget="{Binding ElementName=Root}"
                    IsHitTestVisible="False">
                 <StackPanel x:Name="GhostPanel">
-                    <Border x:Name="RemoveLabel" HorizontalAlignment="Center" Margin="0,0,0,8" CornerRadius="6" Padding="10,3"
-                            Visibility="Collapsed" Background="{DynamicResource MenuBg}"
-                            BorderBrush="{DynamicResource MenuBorder}" BorderThickness="1">
-                        <TextBlock Text="제거" FontSize="13" Foreground="{DynamicResource MenuFg}"/>
-                    </Border>
+                    <Grid x:Name="RemoveLabel" HorizontalAlignment="Center" Margin="0,0,0,4" Visibility="Collapsed">
+                        <Path x:Name="RemoveShape" Fill="{DynamicResource DockBg}" Stroke="{DynamicResource DockBorder}" StrokeThickness="1"/>
+                        <TextBlock x:Name="RemoveText" Text="제거" FontSize="13" Margin="12,3,12,9" Foreground="{DynamicResource BarFg}"/>
+                    </Grid>
                     <Image x:Name="GhostImg" RenderOptions.BitmapScalingMode="HighQuality"/>
                 </StackPanel>
             </Popup>
