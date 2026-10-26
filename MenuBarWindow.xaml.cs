@@ -70,7 +70,12 @@ public partial class MenuBarWindow : Window
         flyoutTimer.Tick += (_, _) => PlaceFlyout();
 
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        timer.Tick += (_, _) => Tick();
+        timer.Tick += (_, _) =>
+        {
+            Tick();
+            // Re-aim just past the next second boundary; a fixed 1s interval drifts and the clock skips a second.
+            timer.Interval = TimeSpan.FromMilliseconds(1020 - DateTime.Now.Millisecond);
+        };
         timer.Start();
         Tick();
         // The Hangul key changes the mode without any event we can watch, so poll it quickly.
@@ -294,7 +299,7 @@ public partial class MenuBarWindow : Window
         UpdateUsage();
         // A UWP frame gets its app child only after it comes to the front, so resolve again.
         OnForeground(GetForegroundWindow());
-        Clock.Text = DateTime.Now.ToString("M월 d일 (ddd) tt h:mm", Korean);
+        Clock.Text = DateTime.Now.ToString("M월 d일 (ddd) tt h:mm:ss", Korean);
         GetSystemPowerStatus(out var power);
         var hasBattery = power.BatteryFlag is not (128 or 255) && power.BatteryLifePercent <= 100;
         BatteryButton.Visibility = hasBattery ? Visibility.Visible : Visibility.Collapsed;

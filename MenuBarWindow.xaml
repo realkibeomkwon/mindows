@@ -180,7 +180,7 @@
                 </Path>
             </Button>
             <Button Style="{StaticResource BarButton}" Click="Clock_Click">
-                <TextBlock x:Name="Clock"/>
+                <TextBlock x:Name="Clock" Typography.NumeralAlignment="Tabular"/>
             </Button>
         </StackPanel>
     </DockPanel>
