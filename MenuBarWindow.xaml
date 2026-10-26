@@ -86,7 +86,7 @@
                     <DataTemplate>
                         <Border CornerRadius="5" Padding="6,0" Margin="1,3"
                                 MouseDown="Tray_MouseDown" MouseUp="Tray_MouseUp" MouseEnter="Tray_MouseEnter"
-                                MouseLeave="Tray_MouseLeave" MouseMove="Tray_MouseMove">
+                                MouseLeave="Tray_MouseLeave" MouseMove="Tray_MouseMove" MouseWheel="Tray_MouseWheel">
                             <Border.Style>
                                 <Style TargetType="Border">
                                     <Setter Property="Background" Value="Transparent"/>

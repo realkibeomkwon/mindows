@@ -160,6 +160,19 @@ public partial class MenuBarWindow : Window
         Volume = new VolumeLevel(volume is { } level ? $"{level.volume}%" : "", waves >= 1 ? 1 : 0.3, waves >= 2 ? 1 : 0.3, waves >= 3 ? 1 : 0.3);
     }
 
+    int wheelRest; // a touchpad scrolls in fractions of a notch
+
+    // Over the volume icon, each wheel notch moves the volume 2%.
+    void Tray_MouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (TrayIcon(sender).GUID != new Guid(NotificationArea.VOLUME_GUID)) return;
+        wheelRest += e.Delta;
+        StepVolume(wheelRest / 60);
+        wheelRest %= 60;
+        UpdateVolume();
+        e.Handled = true;
+    }
+
     // The bar never takes focus, so the Hangul key reaches the foreground app, as on the taskbar.
     void Ime_Click(object sender, RoutedEventArgs e)
     {

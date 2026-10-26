@@ -323,6 +323,15 @@ static class Native
         return ((int)Math.Round(level * 100), muted);
     });
 
+    /// <summary>Moves the default speakers' volume by <paramref name="step"/> percent; turning it up unmutes, as the volume keys do.</summary>
+    public static void StepVolume(int step) => Speakers(v =>
+    {
+        v.GetMasterVolumeLevelScalar(out var level);
+        v.SetMasterVolumeLevelScalar(Math.Clamp((int)Math.Round(level * 100) + step, 0, 100) / 100f, IntPtr.Zero);
+        if (step > 0) v.SetMute(false, IntPtr.Zero);
+        return 0;
+    });
+
     public static string WindowText(IntPtr h)
     {
         var sb = new StringBuilder(512);
