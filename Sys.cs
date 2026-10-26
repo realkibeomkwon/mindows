@@ -10,14 +10,14 @@ namespace Mindows;
 /// <summary>Actions shared by the menu bar and the dock.</summary>
 static class Sys
 {
-    public static void Launch(string path)
+    public static void Launch(string path, string args = "")
     {
         try
         {
             if (path.StartsWith("shell:", StringComparison.OrdinalIgnoreCase) || path.StartsWith("::"))
                 Process.Start("explorer.exe", path);
             else
-                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+                Process.Start(new ProcessStartInfo(path, args) { UseShellExecute = true });
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
         {

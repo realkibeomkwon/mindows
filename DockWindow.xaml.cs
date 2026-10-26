@@ -632,6 +632,18 @@ public partial class DockWindow : Window
         {
             foreach (var h in s.Windows) items.Add(Menus.Item(WindowText(h), () => Sys.Focus(h)));
             if (s.Windows.Count > 0) items.Add(null);
+            if (Browsers.TryGetValue(System.IO.Path.GetFileName(s.Key), out var b))
+            {
+                items.Add(Menus.Item("새 창", () => Sys.Launch(s.Key, b.NewArg)));
+                items.Add(Menus.Item(b.PrivateLabel, () => Sys.Launch(s.Key, b.PrivateArg)));
+                items.Add(null);
+            }
+            else if (s.Windows.Count > 0)
+            {
+                // Most apps open another window when launched again; single-instance ones just come to front.
+                items.Add(Menus.Item("새 창", () => Sys.Launch(s.Key)));
+                items.Add(null);
+            }
             items.Add(Menus.Item("Dock에 유지", () => TogglePin(s), isChecked: s.Pinned));
             if (!s.Key.StartsWith("shell:", StringComparison.OrdinalIgnoreCase))
                 items.Add(Menus.Item("파일 위치 열기", () => Process.Start("explorer.exe", $"/select,\"{s.Key}\"")));
@@ -642,6 +654,18 @@ public partial class DockWindow : Window
         }
         Menus.Show(s.Img!, PlacementMode.Top, items);
     }
+
+    static readonly Dictionary<string, (string NewArg, string PrivateArg, string PrivateLabel)> Browsers =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["chrome.exe"] = ("--new-window", "--incognito", "새 시크릿 창"),
+            ["msedge.exe"] = ("--new-window", "--inprivate", "새 InPrivate 창"),
+            ["whale.exe"] = ("--new-window", "--incognito", "새 시크릿 창"),
+            ["brave.exe"] = ("--new-window", "--incognito", "새 개인 창"),
+            ["vivaldi.exe"] = ("--new-window", "--incognito", "새 개인 창"),
+            ["opera.exe"] = ("--new-window", "--private", "새 개인 창"),
+            ["firefox.exe"] = ("-new-window", "-private-window", "새 사생활 보호 창"),
+        };
 
     void TogglePin(Slot s)
     {
