@@ -54,13 +54,10 @@ public partial class DockWindow : Window
     bool searchSeen;     // Search has shown since the icon was lit
     long searchLitAt;
     readonly Slot runningSeparator; // between pinned apps and running unpinned ones, shown only when there are some
-    readonly Rectangle resizeHandle;
     List<Slot> slots = new();
     Slot? hovered;
     double mouseX = double.NaN;  // NaN while the pointer is off the dock
     double anchorX = double.NaN; // the dock point under this x stays put while icons grow or shrink
-    double? dragStartY;          // screen y where a separator drag started
-    double dragStartSize;
     Slot? pressed, dragged;      // icon under the left button; set as dragged once it moves past the drag threshold
     Point pressAt, grab;         // press point in Root, and in the icon
     Point ghostAt;               // dragged icon's top-left in Root
@@ -108,30 +105,8 @@ public partial class DockWindow : Window
         search.Img.RenderTransformOrigin = new Point(0.5, 0.5);
         searchTimer.Tick += (_, _) => WatchSearch();
 
-        // As on macOS: drag the separator up or down to resize.
-        resizeHandle = new Rectangle { Fill = Brushes.Transparent, Cursor = Cursors.SizeNS };
-        Root.Children.Add(resizeHandle);
-        resizeHandle.MouseLeftButtonDown += (_, e) =>
-        {
-            (dragStartY, dragStartSize) = (ScreenY(), Base);
-            resizeHandle.CaptureMouse();
-            e.Handled = true;
-        };
-        resizeHandle.MouseMove += (_, _) =>
-        {
-            if (dragStartY is { } y0) SetIconSize(dragStartSize + y0 - ScreenY(), commit: false);
-        };
-        resizeHandle.MouseLeftButtonUp += (_, _) =>
-        {
-            if (dragStartY == null) return;
-            dragStartY = null;
-            resizeHandle.ReleaseMouseCapture();
-            SetIconSize(Base, commit: true);
-        };
-
         MouseMove += (_, e) =>
         {
-            if (dragStartY != null) return;
             var p = e.GetPosition(Root);
             if (pressed != null && !DragTo(p)) return;
             anchorX = mouseX = p.X;
@@ -228,8 +203,6 @@ public partial class DockWindow : Window
     static double Magnify(double distance, double size, double max, double range) =>
         distance >= range ? size : size + (max - size) * (Math.Cos(Math.PI * distance / range) + 1) / 2;
 
-    double ScreenY() => PointToScreen(Mouse.GetPosition(this)).Y / VisualTreeHelper.GetDpi(this).DpiScaleY;
-
     /// <summary>Resizes live while dragging; <paramref name="commit"/> also re-reserves the screen strip and saves.</summary>
     public void SetIconSize(double size, bool commit)
     {
@@ -241,7 +214,8 @@ public partial class DockWindow : Window
             config.Save();
         }
         else bar.Resize();
-        if (hidden) Slide(hide: true); // the hidden offset follows the shelf height
+        // An auto-hidden dock shows while the size is dragged, then hides at the new shelf height.
+        if (config.DockAutoHide) Slide(hide: commit && !IsMouseOver);
         Layout();
     }
 
@@ -435,11 +409,7 @@ public partial class DockWindow : Window
         foreach (var s in slots)
         {
             var sx = x + s.ShiftX;
-            if (s.Separator)
-            {
-                Place(s.Line!, sx + SepW / 2, shelfTop + Base * 10 / 52, 1, ShelfH - Base * 20 / 52);
-                if (s == separator) Place(resizeHandle, sx, shelfTop, SepW, ShelfH);
-            }
+            if (s.Separator) Place(s.Line!, sx + SepW / 2, shelfTop + Base * 10 / 52, 1, ShelfH - Base * 20 / 52);
             else
             {
                 var gap = (SlotWidth(s) - s.Size) / 2;
