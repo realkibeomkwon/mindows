@@ -146,6 +146,20 @@ public partial class MenuBarWindow : Window
 
     void Network_Click(object sender, RoutedEventArgs e) => Sys.Launch("ms-availablenetworks:");
 
+    sealed record VolumeLevel(string Text, double Wave1, double Wave2, double Wave3);
+
+    public static readonly DependencyProperty VolumeProperty = DependencyProperty.Register(nameof(Volume), typeof(object), typeof(MenuBarWindow));
+    /// <summary>What the volume icon in the tray template shows, bound from there.</summary>
+    public object? Volume { get => GetValue(VolumeProperty); set => SetValue(VolumeProperty, value); }
+
+    /// <summary>The volume next to the speaker, with the waves beyond it dimmed, all of them when muted.</summary>
+    void UpdateVolume()
+    {
+        var volume = Native.Volume();
+        var waves = volume is not { muted: false, volume: > 0 and var v } ? 0 : v >= 67 ? 3 : v >= 34 ? 2 : 1;
+        Volume = new VolumeLevel(volume is { } level ? $"{level.volume}%" : "", waves >= 1 ? 1 : 0.3, waves >= 2 ? 1 : 0.3, waves >= 3 ? 1 : 0.3);
+    }
+
     // The bar never takes focus, so the Hangul key reaches the foreground app, as on the taskbar.
     void Ime_Click(object sender, RoutedEventArgs e)
     {
@@ -312,6 +326,7 @@ public partial class MenuBarWindow : Window
     {
         ReadySearch();
         UpdateNetwork();
+        UpdateVolume();
         UpdateUsage();
         // A UWP frame gets its app child only after it comes to the front, so resolve again.
         OnForeground(GetForegroundWindow());

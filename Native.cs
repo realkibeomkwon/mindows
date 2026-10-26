@@ -260,6 +260,69 @@ static class Native
         finally { Marshal.ReleaseComObject(item); }
     }
 
+    [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class MMDeviceEnumerator { }
+
+    [ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDeviceEnumerator
+    {
+        void EnumAudioEndpoints(); // never called; keeps GetDefaultAudioEndpoint in its vtable slot
+        [PreserveSig] int GetDefaultAudioEndpoint(int flow, int role, out IMMDevice device);
+    }
+
+    [ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDevice
+    {
+        void Activate(ref Guid iid, int clsCtx, IntPtr activationParams, [MarshalAs(UnmanagedType.IUnknown)] out object iface);
+    }
+
+    [ComImport, Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioEndpointVolume
+    {
+        void RegisterControlChangeNotify(); // never called; keep the others in their vtable slots
+        void UnregisterControlChangeNotify();
+        void GetChannelCount();
+        void SetMasterVolumeLevel();
+        void SetMasterVolumeLevelScalar(float level, IntPtr context);
+        void GetMasterVolumeLevel();
+        void GetMasterVolumeLevelScalar(out float level);
+        void SetChannelVolumeLevel();
+        void SetChannelVolumeLevelScalar();
+        void GetChannelVolumeLevel();
+        void GetChannelVolumeLevelScalar();
+        void SetMute([MarshalAs(UnmanagedType.Bool)] bool mute, IntPtr context);
+        void GetMute([MarshalAs(UnmanagedType.Bool)] out bool mute);
+    }
+
+    static IMMDeviceEnumerator? audioDevices;
+
+    /// <summary>Runs <paramref name="f"/> on the default speakers' volume, looked up each time so a device switch is followed; null when there are none.</summary>
+    static T? Speakers<T>(Func<IAudioEndpointVolume, T> f) where T : struct
+    {
+        try
+        {
+            audioDevices ??= (IMMDeviceEnumerator)new MMDeviceEnumerator();
+            if (audioDevices.GetDefaultAudioEndpoint(0, 1, out var device) != 0) return null; // eRender, eMultimedia
+            try
+            {
+                var iid = typeof(IAudioEndpointVolume).GUID;
+                device.Activate(ref iid, 1, IntPtr.Zero, out var o); // CLSCTX_INPROC_SERVER
+                var volume = (IAudioEndpointVolume)o;
+                try { return f(volume); }
+                finally { Marshal.ReleaseComObject(volume); }
+            }
+            finally { Marshal.ReleaseComObject(device); }
+        }
+        catch (COMException) { return null; } // unplugged mid-call, or the audio service is stopped
+    }
+
+    /// <summary>The default speakers' volume (0–100) and mute; null when there are none.</summary>
+    public static (int volume, bool muted)? Volume() => Speakers(v =>
+    {
+        v.GetMasterVolumeLevelScalar(out var level);
+        v.GetMute(out var muted);
+        return ((int)Math.Round(level * 100), muted);
+    });
+
     public static string WindowText(IntPtr h)
     {
         var sb = new StringBuilder(512);
