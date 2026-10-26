@@ -29,6 +29,12 @@ static class Taskbar
         File.Delete(StateFile);
     }
 
+    /// <summary>The logon task can start Mindows before Explorer creates its taskbar; without Explorer, gives up after 30 s.</summary>
+    public static void WaitForExplorer()
+    {
+        for (var i = 0; i < 300 && ExplorerTray() == IntPtr.Zero; i++) Thread.Sleep(100);
+    }
+
     /// <summary>Explorer re-shows the taskbar on its own (restart, some notifications).</summary>
     public static void Recheck()
     {

@@ -174,6 +174,16 @@
             </ControlTemplate>
         </TabControl.Template>
 
+        <TabItem Header="일반" Tag="&#xE713;">
+            <Border Style="{StaticResource Card}">
+                <DockPanel Style="{StaticResource Row}">
+                    <CheckBox x:Name="LaunchAtLogin" DockPanel.Dock="Right" Style="{StaticResource Switch}"
+                              AutomationProperties.Name="로그인 시 자동 실행" Click="LaunchAtLogin_Click"/>
+                    <TextBlock Text="로그인 시 자동 실행" VerticalAlignment="Center"/>
+                </DockPanel>
+            </Border>
+        </TabItem>
+
         <TabItem Header="Dock" Tag="&#xE8A9;">
             <StackPanel>
                 <Border Style="{StaticResource Card}">

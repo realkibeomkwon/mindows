@@ -1,7 +1,10 @@
+using System.Security;
+using System.Security.Principal;
 using System.Windows;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
+using Microsoft.Win32;
 using static Mindows.Native;
 
 namespace Mindows;
@@ -10,6 +13,8 @@ namespace Mindows;
 public partial class SettingsWindow : Window
 {
     static SettingsWindow? open;
+    const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    const string TaskName = "Mindows";
 
     readonly Config config;
     readonly DockWindow dock;
@@ -41,6 +46,8 @@ public partial class SettingsWindow : Window
     void Sync()
     {
         syncing = true;
+        // The task itself is the setting, so Config keeps no copy that could drift from it.
+        LaunchAtLogin.IsChecked = LogonTaskExists();
         IconSize.Value = config.DockIconSize;
         IconSizeBox.Text = $"{IconSize.Value:0}";
         Magnification.IsChecked = config.DockMagnification;
@@ -70,6 +77,50 @@ public partial class SettingsWindow : Window
         if (e.Key != Key.Enter) return;
         CommitIconSizeBox();
         IconSizeBox.SelectAll();
+    }
+
+    void LaunchAtLogin_Click(object sender, RoutedEventArgs e)
+    {
+        // Earlier builds used the Run key, which Explorer starts a minute or more after sign-in.
+        Registry.CurrentUser.OpenSubKey(RunKey, writable: true)?.DeleteValue("Mindows", throwOnMissingValue: false);
+        if (LaunchAtLogin.IsChecked == true) TaskFolder().RegisterTask(TaskName, LogonTaskXml(), 6 /* CREATE_OR_UPDATE */, null, null, 3 /* INTERACTIVE_TOKEN */);
+        else if (LogonTaskExists()) TaskFolder().DeleteTask(TaskName, 0);
+    }
+
+    static dynamic TaskFolder()
+    {
+        dynamic service = Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service")!)!;
+        service.Connect();
+        return service.GetFolder(@"\");
+    }
+
+    static bool LogonTaskExists()
+    {
+        try { TaskFolder().GetTask(TaskName); return true; }
+        catch (FileNotFoundException) { return false; }
+    }
+
+    /// <summary>
+    /// Starts Mindows as soon as the user signs in. The task's defaults would stop a shell after 3 days or on battery,
+    /// and a hard stop leaves the taskbar hidden.
+    /// </summary>
+    static string LogonTaskXml()
+    {
+        var user = SecurityElement.Escape(WindowsIdentity.GetCurrent().Name);
+        return $"""
+            <?xml version="1.0" encoding="UTF-16"?>
+            <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+              <Triggers><LogonTrigger><UserId>{user}</UserId></LogonTrigger></Triggers>
+              <Principals><Principal><UserId>{user}</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
+              <Settings>
+                <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+                <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+                <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+                <Priority>4</Priority>
+              </Settings>
+              <Actions><Exec><Command>{SecurityElement.Escape(Environment.ProcessPath)}</Command></Exec></Actions>
+            </Task>
+            """;
     }
 
     void IconSizeBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) => CommitIconSizeBox();

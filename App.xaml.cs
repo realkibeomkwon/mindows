@@ -36,6 +36,7 @@ public partial class App : Application
 
         ApplyTheme();
         var config = Config.Load();
+        Taskbar.WaitForExplorer();
         // Hide first: the tray host takes over the Shell_TrayWnd class, and the state file must hold Explorer's state.
         Taskbar.Hide();
         shell = StartTrayHost(config.TrayOrder);
