@@ -90,7 +90,8 @@ sealed class AppBar
         if (msg == CallbackMsg)
         {
             if (wParam == 1) Position(); // ABN_POSCHANGED
-            else if (wParam == 2) window.Visibility = lParam != 0 ? Visibility.Hidden : Visibility.Visible; // ABN_FULLSCREENAPP
+            else if (wParam == 2 && !(lParam != 0 && IsDesktop(GetForegroundWindow()))) // ABN_FULLSCREENAPP
+                window.Visibility = lParam != 0 ? Visibility.Hidden : Visibility.Visible;
         }
         else if (msg == TaskbarCreated && hwnd != IntPtr.Zero) // ignored once removed, so exit can't re-hide the taskbar
         {
@@ -104,4 +105,8 @@ sealed class AppBar
         }
         return IntPtr.Zero;
     }
+
+    // Explorer reports the desktop as a full-screen app once the last window closes and it takes the foreground.
+    // shortcut: a full-screen app launched straight from the desktop may get no new notification and stay under the bars; track the foreground if that shows up.
+    static bool IsDesktop(IntPtr h) => h == IntPtr.Zero || ClassName(h) is "Progman" or "WorkerW";
 }
