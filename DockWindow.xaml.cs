@@ -101,7 +101,7 @@ public partial class DockWindow : Window
         }
         separator = NewSeparator();
         runningSeparator = NewSeparator();
-        trash = NewSlot(TrashKey, "휴지통", IconLoader.Get(TrashKey));
+        trash = NewSlot(TrashKey, "휴지통", null); // Refresh sets its icon once it loads
         trash.Trash = true;
         search = NewSlot(SearchKey, "검색", searchOff);
         search.Img!.RenderTransform = new ScaleTransform(); // Search never bounces; it shrinks and regrows instead
@@ -153,6 +153,7 @@ public partial class DockWindow : Window
         ApplyAutoHide();
         SizeChanged += (_, _) => Layout();
         Loaded += (_, _) => Refresh();
+        IconLoader.Arrived += Refresh; // icons fill in as they load, in the order Refresh keeps
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         timer.Tick += (_, _) => Refresh();
         timer.Start();
@@ -315,13 +316,14 @@ public partial class DockWindow : Window
         return s;
     }
 
-    /// <summary>Existing slot for the key, or a new one; null when the app has no icon (e.g. uninstalled).</summary>
+    /// <summary>Existing slot for the key, or a new one; null when the app has no icon (e.g. uninstalled) or it is still loading.</summary>
     Slot? SlotFor(string key, string name, bool pinned, string? exe = null)
     {
         var s = slots.FirstOrDefault(x => Same(x.Key, key));
         if (s == null)
         {
-            var icon = IconLoader.Get(key) ?? (exe != null ? IconLoader.Get(exe) : null);
+            if (!IconLoader.TryGet(key, out var icon)) return null;
+            if (icon == null && (exe == null || !IconLoader.TryGet(exe, out icon))) return null;
             if (icon == null) return null;
             s = NewSlot(key, name, icon);
         }
@@ -345,7 +347,8 @@ public partial class DockWindow : Window
             if (!wanted.Any(s => Same(s.Key, w.App.Key)) && SlotFor(w.App.Key, w.App.Name, false, w.App.ExePath) is { } s) wanted.Add(s);
         if (wanted.Count > pinnedCount) wanted.Insert(pinnedCount, runningSeparator);
         runningSeparator.Line!.Visibility = wanted.Contains(runningSeparator) ? Visibility.Visible : Visibility.Collapsed;
-        if (trash.Img?.Source != null) wanted.AddRange(new[] { separator, trash });
+        if (trash.Img!.Source == null && IconLoader.TryGet(TrashKey, out var trashIcon)) trash.Img.Source = trashIcon;
+        if (trash.Img.Source != null) wanted.AddRange(new[] { separator, trash });
 
         foreach (var gone in slots.Except(wanted).Where(s => !s.Separator))
         {
