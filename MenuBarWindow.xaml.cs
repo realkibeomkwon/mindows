@@ -68,6 +68,7 @@ public partial class MenuBarWindow : Window
         SetWinEventHook(0x8002, 0x8002, IntPtr.Zero, shownHook, 0, 0, 0); // EVENT_OBJECT_SHOW: Quick Settings
         SetWinEventHook(0x8018, 0x8018, IntPtr.Zero, shownHook, 0, 0, 0); // EVENT_OBJECT_UNCLOAKED: Search
         flyoutTimer.Tick += (_, _) => PlaceFlyout();
+        NetworkChange.NetworkAddressChanged += (_, _) => networkChanged = true;
 
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         timer.Tick += (_, _) =>
@@ -93,8 +94,12 @@ public partial class MenuBarWindow : Window
         ImeButton.Visibility = korean ? Visibility.Visible : Visibility.Collapsed;
         if (!korean) return;
         // WM_IME_CONTROL with IMC_GETCONVERSIONMODE; IME_CMODE_NATIVE (1) is Hangul. SMTO_ABORTIFHUNG.
-        var answered = SendMessageTimeout(ImmGetDefaultIMEWnd(h), 0x283, 1, IntPtr.Zero, 2, 100, out var mode) != IntPtr.Zero;
-        var text = answered && ((long)mode & 1) != 0 ? "한" : "A";
+        // A busy app holds up this thread, and the dock's with it, for the whole timeout, 5 times a second; so keep it short,
+        // and keep the last letter when the app doesn't answer in time.
+        var ime = ImmGetDefaultIMEWnd(h);
+        var mode = IntPtr.Zero;
+        if (ime != IntPtr.Zero && SendMessageTimeout(ime, 0x283, 1, IntPtr.Zero, 2, 20, out mode) == IntPtr.Zero) return;
+        var text = ((long)mode & 1) != 0 ? "한" : "A";
         if (text == imeText) return;
         imeText = text;
         var typeface = new Typeface((FontFamily)FindResource("UiFont"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal);
@@ -115,18 +120,29 @@ public partial class MenuBarWindow : Window
     /// </summary>
     void UpdateNetwork()
     {
-        // A gateway leaves out virtual adapters (WAN miniports, Hyper-V switches, tunnels).
-        var wired = NetworkInterface.GetAllNetworkInterfaces().Any(n => n.OperationalStatus == OperationalStatus.Up
-            && n.NetworkInterfaceType is NetworkInterfaceType.Ethernet or NetworkInterfaceType.GigabitEthernet
-            && n.GetIPProperties().GatewayAddresses.Count > 0);
-        Ethernet.Visibility = wired ? Visibility.Visible : Visibility.Collapsed;
-        Wifi.Visibility = wired ? Visibility.Collapsed : Visibility.Visible;
-        if (wired) return;
+        if (networkChanged)
+        {
+            networkChanged = false; // cleared first, so a change during the read is read again next tick
+            // A gateway leaves out virtual adapters (WAN miniports, Hyper-V switches, tunnels).
+            wired = NetworkInterface.GetAllNetworkInterfaces().Any(n => n.OperationalStatus == OperationalStatus.Up
+                && n.NetworkInterfaceType is NetworkInterfaceType.Ethernet or NetworkInterfaceType.GigabitEthernet
+                && n.GetIPProperties().GatewayAddresses.Count > 0);
+            Ethernet.Visibility = wired ? Visibility.Visible : Visibility.Collapsed;
+            Wifi.Visibility = wired ? Visibility.Collapsed : Visibility.Visible;
+            wifiReadAt = 0;
+        }
+        if (wired || Environment.TickCount64 - wifiReadAt < 5000) return;
+        wifiReadAt = Environment.TickCount64;
         var bars = WifiSignal() is not { } quality ? 0 : quality >= 67 ? 3 : quality >= 34 ? 2 : 1;
         WifiBar1.Opacity = bars >= 1 ? 1 : 0.3;
         WifiBar2.Opacity = bars >= 2 ? 1 : 0.3;
         WifiBar3.Opacity = bars >= 3 ? 1 : 0.3;
     }
+
+    // Listing the adapters can block this thread for ~20 ms, so it is read only after an address change, not every tick.
+    volatile bool networkChanged = true; // set on a pool thread by NetworkChange
+    bool wired;
+    long wifiReadAt; // the signal strength changes without an address change, so it is polled, every 5 s
 
     void Network_Click(object sender, RoutedEventArgs e) => Sys.Launch("ms-availablenetworks:");
 

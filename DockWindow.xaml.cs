@@ -422,9 +422,13 @@ public partial class DockWindow : Window
 
         if (hovered?.Img is { } img && dragged == null)
         {
-            LabelText.Text = hovered.Name;
+            // Layout runs every animation frame; the tag's shape only changes with its text.
+            if (LabelText.Text != hovered.Name || LabelShape.Data == null)
+            {
+                LabelText.Text = hovered.Name;
+                LabelShape.Data = TagShape(LabelText);
+            }
             Label.Visibility = Visibility.Visible;
-            LabelShape.Data = TagShape(LabelText);
             double w = LabelText.DesiredSize.Width, h = LabelText.DesiredSize.Height - TagArrowH;
             Canvas.SetLeft(Label, Canvas.GetLeft(img) + hovered.Size / 2 - w / 2);
             // As on macOS, the arrow sits just above the shelf, and rises with a magnified icon.
