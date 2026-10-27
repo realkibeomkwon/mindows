@@ -10,10 +10,11 @@
         <Style x:Key="BarButton" TargetType="Button">
             <Setter Property="Focusable" Value="False"/>
             <Setter Property="Foreground" Value="{DynamicResource BarFg}"/>
+            <Setter Property="Padding" Value="9,0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" Background="Transparent" CornerRadius="5" Padding="9,0" Margin="1,3">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="5" Padding="{TemplateBinding Padding}" Margin="1,3">
                             <ContentPresenter VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -32,8 +33,9 @@
     </Window.Resources>
 
     <DockPanel LastChildFill="False">
-        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Margin="8,0,0,0">
-            <Button x:Name="LogoButton" Style="{StaticResource BarButton}" Click="Logo_Click">
+        <!-- As on macOS, the menu titles sit closer together than the status items on the right. -->
+        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Margin="9,0,0,0">
+            <Button x:Name="LogoButton" Style="{StaticResource BarButton}" Padding="8,0" Click="Logo_Click">
                 <!-- The taskbar's Start logo (Icons\WindowsLogo.svg in the shell's Client.Core package). -->
                 <Path Width="13" Height="13" Stretch="Uniform"
                       Data="M5.5,11.5 H0.5 C0.2239,11.5 0,11.2761 0,11 V6 H5.5 Z M11.5,11 C11.5,11.2761 11.2761,11.5 11,11.5 H6 V6 H11.5 Z
@@ -46,10 +48,10 @@
                     </Path.Fill>
                 </Path>
             </Button>
-            <Button x:Name="AppButton" Style="{StaticResource BarButton}" Click="App_Click">
+            <Button x:Name="AppButton" Style="{StaticResource BarButton}" Padding="8,0" Click="App_Click">
                 <TextBlock x:Name="AppName" FontWeight="Bold" Text="Mindows"/>
             </Button>
-            <Button x:Name="WindowButton" Style="{StaticResource BarButton}" Click="Window_Click">
+            <Button x:Name="WindowButton" Style="{StaticResource BarButton}" Padding="8,0" Click="Window_Click">
                 <TextBlock Text="윈도우"/>
             </Button>
         </StackPanel>
@@ -68,7 +70,7 @@
                             <StackPanel Orientation="Horizontal">
                                 <Path Data="{Binding Logo}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource BarFg}"
                                       VerticalAlignment="Center"/>
-                                <TextBlock Text="{Binding Text}" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding Text}" Margin="7,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
                     </DataTemplate>
@@ -84,7 +86,7 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Border CornerRadius="5" Padding="6,0" Margin="1,3"
+                        <Border CornerRadius="5" Padding="8,0" Margin="1,3"
                                 MouseDown="Tray_MouseDown" MouseUp="Tray_MouseUp" MouseEnter="Tray_MouseEnter"
                                 MouseLeave="Tray_MouseLeave" MouseMove="Tray_MouseMove" MouseWheel="Tray_MouseWheel">
                             <Border.Style>
