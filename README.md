@@ -16,6 +16,23 @@ dotnet run -c Release
 dotnet run -c Release -- --restore
 ```
 
+설치 프로그램으로 설치했다면 시작 메뉴(Win 키)의 **Mindows 작업 표시줄 복원**을 실행합니다.
+
+## 설치 프로그램 만들기
+
+[Inno Setup 6](https://jrsoftware.org/isinfo.php)이 필요합니다(`winget install JRSoftware.InnoSetup`).
+
+```bash
+dotnet publish -c Release -r win-x64 --self-contained -o publish
+iscc installer\Mindows.iss
+```
+
+`installer\Output\MindowsSetup-<버전>.exe`가 만들어집니다. 버전은 `Mindows.csproj`의 `<Version>`을 따릅니다. .NET 런타임을 포함하므로 대상 PC에 런타임을 따로 설치할 필요가 없습니다.
+
+- 관리자 권한 없이 `%LOCALAPPDATA%\Programs\Mindows`에 설치하고, 시작 메뉴에 바로 가기를 만듭니다.
+- 업그레이드할 때는 실행 중인 Mindows를 종료하고 작업 표시줄을 복원한 뒤 파일을 교체합니다.
+- 제거할 때는 Mindows를 종료하고 작업 표시줄을 복원하며, 로그인 시 자동 실행 작업도 삭제합니다. `%APPDATA%\Mindows`의 설정은 남깁니다.
+
 ## 기능
 
 **메뉴 바**
