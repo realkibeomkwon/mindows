@@ -15,16 +15,20 @@ sealed class AppBar
     static readonly uint CallbackMsg = RegisterWindowMessage("MindowsAppBar");
     static readonly uint TaskbarCreated = RegisterWindowMessage("TaskbarCreated");
     static readonly List<AppBar> all = new();
+    // Explorer keeps reporting full screen while the foreground moves between windows it counts as full screen.
+    static readonly WinEventProc foregroundHook = (_, _, _, idObject, _, _, _) => { if (idObject == 0) foreach (var bar in all) bar.UpdateVisibility(); };
 
     readonly Window window;
     readonly uint edge;
     readonly Func<double> reserve, height; // DIPs
     IntPtr hwnd;
     RECT reserved;
+    bool fullScreenReported; // last ABN_FULLSCREENAPP
 
     public AppBar(Window window, uint edge, Func<double> reserve, Func<double> height)
     {
         (this.window, this.edge, this.reserve, this.height) = (window, edge, reserve, height);
+        if (all.Count == 0) SetWinEventHook(3, 3, IntPtr.Zero, foregroundHook, 0, 0, 0); // EVENT_SYSTEM_FOREGROUND, out of context
         all.Add(this);
         window.SourceInitialized += (_, _) =>
         {
@@ -90,8 +94,11 @@ sealed class AppBar
         if (msg == CallbackMsg)
         {
             if (wParam == 1) Position(); // ABN_POSCHANGED
-            else if (wParam == 2 && !(lParam != 0 && IsDesktop(GetForegroundWindow()))) // ABN_FULLSCREENAPP
-                window.Visibility = lParam != 0 ? Visibility.Hidden : Visibility.Visible;
+            else if (wParam == 2) // ABN_FULLSCREENAPP
+            {
+                fullScreenReported = lParam != 0;
+                UpdateVisibility();
+            }
         }
         else if (msg == TaskbarCreated && hwnd != IntPtr.Zero) // ignored once removed, so exit can't re-hide the taskbar
         {
@@ -106,7 +113,18 @@ sealed class AppBar
         return IntPtr.Zero;
     }
 
-    // Explorer reports the desktop as a full-screen app once the last window closes and it takes the foreground.
-    // shortcut: a full-screen app launched straight from the desktop may get no new notification and stay under the bars; track the foreground if that shows up.
-    static bool IsDesktop(IntPtr h) => h == IntPtr.Zero || ClassName(h) is "Progman" or "WorkerW";
+    void UpdateVisibility() =>
+        window.Visibility = fullScreenReported && IsFullScreen(GetForegroundWindow()) ? Visibility.Hidden : Visibility.Visible;
+
+    // Explorer also reports a full-screen app once the last window closes and whatever is left takes the foreground:
+    // the desktop, the lock screen's screen-sized window that stays visible behind it, or a background app's zero-size window.
+    static bool IsFullScreen(IntPtr h)
+    {
+        if (h == IntPtr.Zero || ClassName(h) is "Progman" or "WorkerW") return false;
+        GetWindowThreadProcessId(h, out var pid);
+        if (Path.GetFileName(QueryProcess(pid).exe) is "LockApp.exe") return false;
+        GetWindowRect(h, out var r);
+        var m = PrimaryMonitor().bounds;
+        return r.Left <= m.Left && r.Top <= m.Top && r.Right >= m.Right && r.Bottom >= m.Bottom;
+    }
 }
