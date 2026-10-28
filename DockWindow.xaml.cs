@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using static Mindows.Native;
@@ -16,7 +17,7 @@ public partial class DockWindow : Window
 {
     // Sizes in DIPs. The name tag and the dots keep their size at any icon size, as on macOS.
     const double Magnification = 1.75, TagArrowW = 16, TagArrowH = 6, TagLift = 4;
-    const string TrashKey = "::{645FF040-5081-101B-9F08-00AA002F954E}";
+    const string TrashKey = "::{645FF040-5081-101B-9F08-00AA002F954E}", SearchKey = "mindows:search";
 
     double Base => config.DockIconSize;
     double Max => config.DockMagnification ? Math.Round(Base * Magnification) : Base;
@@ -45,15 +46,18 @@ public partial class DockWindow : Window
 
     readonly Config config;
     readonly AppBar bar;
-    readonly Slot separator, trash;
+    readonly Slot separator, trash, search;
+    // As on the taskbar: a plain Search icon, and a colored one while Search is open.
+    readonly ImageSource? searchOff = SearchIcon("Off"), searchOn = SearchIcon("On");
+    readonly DispatcherTimer searchTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
+    IntPtr searchWindow;
+    bool searchSeen;     // Search has shown since the icon was lit
+    long searchLitAt;
     readonly Slot runningSeparator; // between pinned apps and running unpinned ones, shown only when there are some
-    readonly Rectangle resizeHandle;
     List<Slot> slots = new();
     Slot? hovered;
     double mouseX = double.NaN;  // NaN while the pointer is off the dock
     double anchorX = double.NaN; // the dock point under this x stays put while icons grow or shrink
-    double? dragStartY;          // screen y where a separator drag started
-    double dragStartSize;
     Slot? pressed, dragged;      // icon under the left button; set as dragged once it moves past the drag threshold
     Point pressAt, grab;         // press point in Root, and in the icon
     Point ghostAt;               // dragged icon's top-left in Root
@@ -94,33 +98,15 @@ public partial class DockWindow : Window
         }
         separator = NewSeparator();
         runningSeparator = NewSeparator();
-        trash = NewSlot(TrashKey, "휴지통", IconLoader.Get(TrashKey));
+        trash = NewSlot(TrashKey, "휴지통", null); // Refresh sets its icon once it loads
         trash.Trash = true;
-
-        // As on macOS: drag the separator up or down to resize.
-        resizeHandle = new Rectangle { Fill = Brushes.Transparent, Cursor = Cursors.SizeNS };
-        Root.Children.Add(resizeHandle);
-        resizeHandle.MouseLeftButtonDown += (_, e) =>
-        {
-            (dragStartY, dragStartSize) = (ScreenY(), Base);
-            resizeHandle.CaptureMouse();
-            e.Handled = true;
-        };
-        resizeHandle.MouseMove += (_, _) =>
-        {
-            if (dragStartY is { } y0) SetIconSize(dragStartSize + y0 - ScreenY(), commit: false);
-        };
-        resizeHandle.MouseLeftButtonUp += (_, _) =>
-        {
-            if (dragStartY == null) return;
-            dragStartY = null;
-            resizeHandle.ReleaseMouseCapture();
-            SetIconSize(Base, commit: true);
-        };
+        search = NewSlot(SearchKey, "검색", searchOff);
+        search.Img!.RenderTransform = new ScaleTransform(); // Search never bounces; it shrinks and regrows instead
+        search.Img.RenderTransformOrigin = new Point(0.5, 0.5);
+        searchTimer.Tick += (_, _) => WatchSearch();
 
         MouseMove += (_, e) =>
         {
-            if (dragStartY != null) return;
             var p = e.GetPosition(Root);
             if (pressed != null && !DragTo(p)) return;
             anchorX = mouseX = p.X;
@@ -142,15 +128,80 @@ public partial class DockWindow : Window
         ApplyAutoHide();
         SizeChanged += (_, _) => Layout();
         Loaded += (_, _) => Refresh();
+        IconLoader.Arrived += Refresh; // icons fill in as they load, in the order Refresh keeps
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         timer.Tick += (_, _) => Refresh();
         timer.Start();
     }
 
+    /// <summary>The taskbar's own Search icon, "Off" or "On", inset like an app icon; null if a Windows update moves it.</summary>
+    static ImageSource? SearchIcon(string state)
+    {
+        // shortcut: the shell ships it at 64px at most, so it is soft when magnified; draw it as a vector if that shows.
+        var path = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), @"SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy",
+            $@"StartMenu\Assets\SearchIcons\SearchIcon{state}{(App.LightTheme ? "Light" : "Dark")}.scale-400.png");
+        if (!File.Exists(path)) return null;
+        var drawing = new DrawingGroup();
+        drawing.Children.Add(new GeometryDrawing(Brushes.Transparent, null, new RectangleGeometry(new Rect(0, 0, 10, 10))));
+        drawing.Children.Add(new ImageDrawing(new BitmapImage(new Uri(path)), new Rect(1, 1, 8, 8)));
+        var icon = new DrawingImage(drawing);
+        icon.Freeze();
+        return icon;
+    }
+
+    bool SearchShown()
+    {
+        if (!IsWindow(searchWindow)) searchWindow = AllTopLevelWindows().FirstOrDefault(MenuBarWindow.IsSearch);
+        return MenuBarWindow.IsShown(searchWindow);
+    }
+
+    void ClickSearch()
+    {
+        var open = SearchShown();
+        Sys.WinKey('S'); // toggles it; a close puts the plain icon back in WatchSearch
+        if (!open && searchOn != null) LightSearch(animate: true);
+    }
+
+    /// <summary>Shows the colored icon until Search closes; a click shrinks the plain one and regrows it colored, as the taskbar does.</summary>
+    void LightSearch(bool animate)
+    {
+        (searchSeen, searchLitAt) = (false, Environment.TickCount64);
+        searchTimer.Start();
+        if (!animate)
+        {
+            search.Img!.Source = searchOn;
+            return;
+        }
+        var scale = (ScaleTransform)search.Img!.RenderTransform;
+        void Scale(double to, int ms, IEasingFunction ease, EventHandler? done = null)
+        {
+            var x = new DoubleAnimation(to, TimeSpan.FromMilliseconds(ms)) { EasingFunction = ease };
+            if (done != null) x.Completed += done;
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty, x);
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(to, TimeSpan.FromMilliseconds(ms)) { EasingFunction = ease });
+        }
+        Scale(0.7, 100, new QuadraticEase { EasingMode = EasingMode.EaseOut }, (_, _) =>
+        {
+            search.Img.Source = searchOn;
+            Scale(1, 250, new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.5 });
+        });
+    }
+
+    void WatchSearch()
+    {
+        var shown = SearchShown();
+        searchSeen |= shown;
+        // Back to the plain icon once Search closes, or if it never opened.
+        if (shown || !searchSeen && Environment.TickCount64 - searchLitAt < 2000) return;
+        searchTimer.Stop();
+        search.Img!.Source = searchOff;
+    }
+
+    /// <summary>Screen y of the shelf's top edge at rest, in physical pixels; Search opens above it.</summary>
+    public int ShelfTop => (int)Math.Round(PointToScreen(new Point(0, ActualHeight - BottomMargin - ShelfH)).Y);
+
     static double Magnify(double distance, double size, double max, double range) =>
         distance >= range ? size : size + (max - size) * (Math.Cos(Math.PI * distance / range) + 1) / 2;
-
-    double ScreenY() => PointToScreen(Mouse.GetPosition(this)).Y / VisualTreeHelper.GetDpi(this).DpiScaleY;
 
     /// <summary>Resizes live while dragging; <paramref name="commit"/> also re-reserves the screen strip and saves.</summary>
     public void SetIconSize(double size, bool commit)
@@ -163,7 +214,8 @@ public partial class DockWindow : Window
             config.Save();
         }
         else bar.Resize();
-        if (hidden) Slide(hide: true); // the hidden offset follows the shelf height
+        // An auto-hidden dock shows while the size is dragged, then hides at the new shelf height.
+        if (config.DockAutoHide) Slide(hide: commit && !IsMouseOver);
         Layout();
     }
 
@@ -238,13 +290,14 @@ public partial class DockWindow : Window
         return s;
     }
 
-    /// <summary>Existing slot for the key, or a new one; null when the app has no icon (e.g. uninstalled).</summary>
+    /// <summary>Existing slot for the key, or a new one; null when the app has no icon (e.g. uninstalled) or it is still loading.</summary>
     Slot? SlotFor(string key, string name, bool pinned, string? exe = null)
     {
         var s = slots.FirstOrDefault(x => Same(x.Key, key));
         if (s == null)
         {
-            var icon = IconLoader.Get(key) ?? (exe != null ? IconLoader.Get(exe) : null);
+            if (!IconLoader.TryGet(key, out var icon)) return null;
+            if (icon == null && (exe == null || !IconLoader.TryGet(exe, out icon))) return null;
             if (icon == null) return null;
             s = NewSlot(key, name, icon);
         }
@@ -257,6 +310,8 @@ public partial class DockWindow : Window
         if (dragged != null) return; // the drag owns the order until the drop
         var windows = WindowTracker.List();
         var wanted = new List<Slot>();
+        if (search.Img?.Source != null) wanted.Add(search); // first, where the taskbar has it
+        if (!searchTimer.IsEnabled && searchOn != null && SearchShown()) LightSearch(animate: false); // opened with Win+S
         foreach (var p in config.Pinned)
             if (!wanted.Any(s => Same(s.Key, p.Path)) && SlotFor(p.Path, p.Name, true) is { } s) wanted.Add(s);
         var pinnedCount = wanted.Count;
@@ -266,7 +321,8 @@ public partial class DockWindow : Window
             if (!wanted.Any(s => Same(s.Key, w.App.Key)) && SlotFor(w.App.Key, w.App.Name, false, w.App.ExePath) is { } s) wanted.Add(s);
         if (wanted.Count > pinnedCount) wanted.Insert(pinnedCount, runningSeparator);
         runningSeparator.Line!.Visibility = wanted.Contains(runningSeparator) ? Visibility.Visible : Visibility.Collapsed;
-        if (trash.Img?.Source != null) wanted.AddRange(new[] { separator, trash });
+        if (trash.Img!.Source == null && IconLoader.TryGet(TrashKey, out var trashIcon)) trash.Img.Source = trashIcon;
+        if (trash.Img.Source != null) wanted.AddRange(new[] { separator, trash });
 
         foreach (var gone in slots.Except(wanted).Where(s => !s.Separator))
         {
@@ -353,11 +409,7 @@ public partial class DockWindow : Window
         foreach (var s in slots)
         {
             var sx = x + s.ShiftX;
-            if (s.Separator)
-            {
-                Place(s.Line!, sx + SepW / 2, shelfTop + Base * 10 / 52, 1, ShelfH - Base * 20 / 52);
-                if (s == separator) Place(resizeHandle, sx, shelfTop, SepW, ShelfH);
-            }
+            if (s.Separator) Place(s.Line!, sx + SepW / 2, shelfTop + Base * 10 / 52, 1, ShelfH - Base * 20 / 52);
             else
             {
                 var gap = (SlotWidth(s) - s.Size) / 2;
@@ -370,9 +422,13 @@ public partial class DockWindow : Window
 
         if (hovered?.Img is { } img && dragged == null)
         {
-            LabelText.Text = hovered.Name;
+            // Layout runs every animation frame; the tag's shape only changes with its text.
+            if (LabelText.Text != hovered.Name || LabelShape.Data == null)
+            {
+                LabelText.Text = hovered.Name;
+                LabelShape.Data = TagShape(LabelText);
+            }
             Label.Visibility = Visibility.Visible;
-            LabelShape.Data = TagShape(LabelText);
             double w = LabelText.DesiredSize.Width, h = LabelText.DesiredSize.Height - TagArrowH;
             Canvas.SetLeft(Label, Canvas.GetLeft(img) + hovered.Size / 2 - w / 2);
             // As on macOS, the arrow sits just above the shelf, and rises with a magnified icon.
@@ -439,9 +495,10 @@ public partial class DockWindow : Window
             if (s != dragged && px > x + w / 2) index++;
             x += w;
         }
-        var pinned = slots.Count(s => s.Pinned && s != dragged);
+        var first = slots.IndexOf(search) + 1; // pinned icons start after Search
+        var pinned = first + slots.Count(s => s.Pinned && s != dragged);
         // An unpinned app stays put until it is brought into the pinned icons.
-        return index <= pinned ? index : dragged!.Pinned ? pinned : homeIndex;
+        return index < first ? first : index <= pinned ? index : dragged!.Pinned ? pinned : homeIndex;
     }
 
     /// <summary>Moves the pressed icon with the pointer once past the drag threshold; false while it is off the dock.</summary>
@@ -450,7 +507,7 @@ public partial class DockWindow : Window
         var s = pressed!;
         if (dragged == null)
         {
-            if (s.Trash || Math.Abs(p.X - pressAt.X) < SystemParameters.MinimumHorizontalDragDistance
+            if (s.Trash || s == search || Math.Abs(p.X - pressAt.X) < SystemParameters.MinimumHorizontalDragDistance
                 && Math.Abs(p.Y - pressAt.Y) < SystemParameters.MinimumVerticalDragDistance) return true;
             (dragged, hovered, homeIndex) = (s, null, slots.IndexOf(s));
             GhostImg.Source = s.Img!.Source;
@@ -515,6 +572,7 @@ public partial class DockWindow : Window
     void Click(Slot s)
     {
         if (s.Trash) Sys.Launch("shell:RecycleBinFolder");
+        else if (s == search) ClickSearch();
         else if (s.Windows.Count == 0)
         {
             Sys.Launch(s.Key);
@@ -537,6 +595,7 @@ public partial class DockWindow : Window
 
     void ShowMenu(Slot s)
     {
+        if (s == search) return; // nothing to keep in the dock or open the location of
         var items = new List<Control?>();
         if (s.Trash)
         {
@@ -545,8 +604,20 @@ public partial class DockWindow : Window
         }
         else
         {
-            foreach (var h in s.Windows) items.Add(Menus.Item(WindowText(h), () => Sys.Focus(h)));
+            foreach (var h in s.Windows) items.Add(Menus.Item(WindowText(h) is { Length: > 0 } t ? t : s.Name, () => Sys.Focus(h)));
             if (s.Windows.Count > 0) items.Add(null);
+            if (Browsers.TryGetValue(System.IO.Path.GetFileName(s.Key), out var b))
+            {
+                items.Add(Menus.Item("새 창", () => Sys.Launch(s.Key, b.NewArg)));
+                items.Add(Menus.Item(b.PrivateLabel, () => Sys.Launch(s.Key, b.PrivateArg)));
+                items.Add(null);
+            }
+            else if (s.Windows.Count > 0)
+            {
+                // Most apps open another window when launched again; single-instance ones just come to front.
+                items.Add(Menus.Item("새 창", () => Sys.Launch(s.Key)));
+                items.Add(null);
+            }
             items.Add(Menus.Item("Dock에 유지", () => TogglePin(s), isChecked: s.Pinned));
             if (!s.Key.StartsWith("shell:", StringComparison.OrdinalIgnoreCase))
                 items.Add(Menus.Item("파일 위치 열기", () => Process.Start("explorer.exe", $"/select,\"{s.Key}\"")));
@@ -557,6 +628,18 @@ public partial class DockWindow : Window
         }
         Menus.Show(s.Img!, PlacementMode.Top, items);
     }
+
+    static readonly Dictionary<string, (string NewArg, string PrivateArg, string PrivateLabel)> Browsers =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["chrome.exe"] = ("--new-window", "--incognito", "새 시크릿 창"),
+            ["msedge.exe"] = ("--new-window", "--inprivate", "새 InPrivate 창"),
+            ["whale.exe"] = ("--new-window", "--incognito", "새 시크릿 창"),
+            ["brave.exe"] = ("--new-window", "--incognito", "새 개인 창"),
+            ["vivaldi.exe"] = ("--new-window", "--incognito", "새 개인 창"),
+            ["opera.exe"] = ("--new-window", "--private", "새 개인 창"),
+            ["firefox.exe"] = ("-new-window", "-private-window", "새 사생활 보호 창"),
+        };
 
     void TogglePin(Slot s)
     {

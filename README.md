@@ -16,6 +16,23 @@ dotnet run -c Release
 dotnet run -c Release -- --restore
 ```
 
+설치 프로그램으로 설치했다면 시작 메뉴(Win 키)의 **Mindows 작업 표시줄 복원**을 실행합니다.
+
+## 설치 프로그램 만들기
+
+[Inno Setup 6](https://jrsoftware.org/isinfo.php)이 필요합니다(`winget install JRSoftware.InnoSetup`).
+
+```bash
+dotnet publish -c Release -r win-x64 --self-contained -o publish
+iscc installer\Mindows.iss
+```
+
+`installer\Output\MindowsSetup-<버전>.exe`가 만들어집니다. 버전은 `Mindows.csproj`의 `<Version>`을 따릅니다. .NET 런타임을 포함하므로 대상 PC에 런타임을 따로 설치할 필요가 없습니다.
+
+- 관리자 권한 없이 `%LOCALAPPDATA%\Programs\Mindows`에 설치하고, 시작 메뉴에 바로 가기를 만듭니다.
+- 업그레이드할 때는 실행 중인 Mindows를 종료하고 작업 표시줄을 복원한 뒤 파일을 교체합니다.
+- 제거할 때는 Mindows를 종료하고 작업 표시줄을 복원하며, 로그인 시 자동 실행 작업도 삭제합니다. `%APPDATA%\Mindows`의 설정은 남깁니다.
+
 ## 기능
 
 **메뉴 바**
@@ -24,16 +41,17 @@ dotnet run -c Release -- --restore
 - 윈도우 메뉴: 최소화, 확대/축소, 닫기, 앱의 창 목록
 - 오른쪽: 트레이 아이콘, 배터리, 빠른 설정(Win+A), 검색(Win+S), 시계(Win+N 알림 센터)
 - 트레이 아이콘: Mindows가 알림 영역 호스트 역할을 맡아([ManagedShell](https://github.com/cairoshell/ManagedShell)), 앱의 트레이 아이콘을 메뉴 바에 표시합니다. 클릭과 우클릭은 해당 앱으로 전달됩니다. 네트워크와 볼륨 아이콘은 시계 쪽에 고정됩니다.
+- AI 사용량: 별도 앱인 [UsageBar](../usagebar)가 실행 중이면, 트레이 아이콘 왼쪽에 공급자(Claude, Codex, Grok)별 로고와 남은 사용량(%)을 표시합니다. 마지막 갱신에 실패한 항목은 흐리게 표시되며, 항목을 클릭하면 UsageBar의 상세 팝업이 열립니다. 이때 UsageBar 자체의 트레이 아이콘은 메뉴 바에 표시하지 않습니다.
 
 **Dock**
 - 고정 앱과 실행 중인 앱, 실행 표시 점, 휴지통
 - 고정하지 않은 실행 중인 앱은 구분선 오른쪽에 실행한 순서대로 놓입니다.
 - 마우스 위치에 따른 확대 효과와 이름 라벨, 실행 시 튀어오르는 애니메이션
 - 클릭: 실행하거나 앞으로 가져오기(이미 앞에 있으면 다음 창으로 순환)
-- 우클릭: 창 목록, Dock에 유지, 파일 위치 열기, 종료 / 휴지통 열기·비우기
+- 우클릭: 창 목록, 새 창(브라우저는 시크릿/사생활 보호 창 포함), Dock에 유지, 파일 위치 열기, 종료 / 휴지통 열기·비우기
 - 드래그: 아이콘을 좌우로 끌어 순서를 바꾸면 `Pinned`에 저장됩니다. 실행 중인 앱을 고정 앱 사이로 옮기면 Dock에 고정됩니다.
 - 제거: 고정 앱을 Dock 밖으로 끌어내면 `제거`가 표시되고, 놓으면 Dock에서 빠집니다(실행 중이면 고정만 해제됩니다).
-- 크기 조절: 휴지통 앞의 구분선을 위아래로 드래그합니다.
+- 크기 조절: 설정의 슬라이더로 조절합니다. 자동 가리기가 켜져 있어도 슬라이더를 끄는 동안에는 Dock이 보입니다.
 - 자동 가리기: 켜면 Dock이 화면 아래로 숨고, 마우스 포인터를 화면 아래쪽 끝에 대면 다시 나타납니다.
 
 메뉴 바와 Dock은 셸 AppBar로 등록되므로, 최대화한 창이 두 영역을 가리지 않습니다(Dock 자동 가리기를 켜면 Dock 영역은 예약하지 않습니다).
@@ -42,7 +60,15 @@ dotnet run -c Release -- --restore
 
 로고 메뉴 → **Mindows 설정...**을 선택하면 설정 창이 열립니다. 왼쪽에서 카테고리를 고르면 오른쪽에 해당 항목이 표시되며, 변경 사항은 즉시 적용되고 저장됩니다.
 
+- 일반: 로그인 시 자동 실행. 작업 스케줄러에 로그온 시 실행되는 `Mindows` 작업을 등록하며, 지금 실행 중인 Mindows.exe의 경로가 기록됩니다. `HKCU\...\CurrentVersion\Run`과 달리 Explorer의 시작 프로그램 지연을 기다리지 않으므로 로그인 직후 실행됩니다.
 - Dock: 크기(슬라이더 또는 숫자 입력), 확대 효과, 자동으로 Dock 가리기 및 보기, 가리기 및 보기 애니메이션(끄면 즉시 사라지고 나타남)
+- 핫 코너: 주 모니터의 네 모서리에 마우스 포인터를 밀어 넣으면 실행할 동작을 고릅니다. 미리 보기에는 현재 바탕 화면 그림이 표시됩니다. macOS처럼 보조 키를 누른 채 동작을 고르면, 모서리에서도 같은 보조 키를 누르고 있어야 동작이 실행됩니다. 보조 키는 Ctrl, Win, Alt, Shift이며, 같은 키를 계속 누른 채 모서리에 다시 가져가면 동작이 다시 실행됩니다. 동작은 Windows 기능으로 다음과 같이 실행합니다.
+  - Mission Control, 응용 프로그램 윈도우: 작업 보기(Win+Tab). Windows에는 한 앱의 창만 보여 주는 화면이 없어서 둘 다 작업 보기를 엽니다.
+  - 데스크탑: 앱 창을 모두 최소화하고, 다시 실행하면 최소화했던 창을 원래 쌓인 순서대로 되돌립니다(Win+D는 되돌릴 때마다 순서가 바뀝니다).
+  - 알림 센터: Win+N / 앱: 시작 메뉴 / 빠른 메모: 메모장
+  - 화면 보호기 시작: 지정한 화면 보호기를 실행하며, 지정하지 않았다면 기본 제공되는 빈 화면 보호기를 실행합니다.
+  - 화면 보호기 비활성화: 포인터가 모서리에 머무는 동안 화면 보호기와 디스플레이 끄기를 막습니다.
+  - 디스플레이를 잠자기 상태로 전환: 모니터를 끕니다 / 화면 잠금: Win+L과 같습니다.
 
 설정은 `%APPDATA%\Mindows\config.json`에 저장되며, 다음 항목을 직접 편집할 수도 있습니다.
 
@@ -51,6 +77,7 @@ dotnet run -c Release -- --restore
 - `DockMagnification`: 확대 효과 사용 여부
 - `DockAutoHide`: Dock 자동 가리기 사용 여부
 - `DockAutoHideAnimation`: 자동 가리기 시 미끄러지는 애니메이션 사용 여부
+- `HotCorners`: 왼쪽 위, 오른쪽 위, 왼쪽 아래, 오른쪽 아래 순서의 핫 코너. `Action`은 동작 이름(`None`, `MissionControl`, `ApplicationWindows`, `Desktop`, `NotificationCenter`, `Apps`, `QuickNote`, `StartScreenSaver`, `DisableScreenSaver`, `DisplaySleep`, `LockScreen`), `Modifiers`는 함께 눌러야 하는 키(`Control`, `Alt`, `Shift`, `Windows`를 쉼표로 구분)입니다.
 
 오류가 발생하면 같은 폴더의 `crash.log`에 기록됩니다.
 
@@ -58,6 +85,7 @@ dotnet run -c Release -- --restore
 
 - 주 모니터만 지원합니다.
 - 관리자 권한으로 실행된 앱의 트레이 아이콘은 클릭에 반응하지 않을 수 있습니다(Windows의 권한 격리, UIPI). 이 경우 Mindows를 관리자 권한으로 실행해야 할 수 있습니다.
+- 같은 이유로, 관리자 권한으로 실행된 앱이 활성 창인 동안에는 보조 키를 눌러도 Mindows가 읽지 못하므로 보조 키가 지정된 핫 코너가 동작하지 않습니다. 보조 키 없이 지정한 핫 코너는 동작합니다.
 - Mindows가 실행되는 동안 다른 앱의 작업 표시줄 상태 조회(`ABM_GETSTATE` 등)는 ManagedShell이 응답합니다.
 - 앱별 전역 메뉴(파일/편집/보기 등), Mission Control, Launchpad, Spotlight, 탐색기에서 Dock으로 끌어 놓기, 자동 시작은 구현하지 않았습니다.
 - 테마(라이트/다크)는 시작할 때 한 번만 읽습니다.

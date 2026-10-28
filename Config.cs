@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Windows.Input;
 
 namespace Mindows;
 
@@ -7,6 +9,13 @@ public class PinnedApp
     public string Name { get; set; } = "";
     /// <summary>Exe path, or shell:AppsFolder\&lt;AUMID&gt; for packaged apps.</summary>
     public string Path { get; set; } = "";
+}
+
+public class HotCorner
+{
+    [JsonConverter(typeof(JsonStringEnumConverter))] public HotCornerAction Action { get; set; }
+    /// <summary>Held at the corner as they were when the action was chosen.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))] public ModifierKeys Modifiers { get; set; }
 }
 
 public class Config
@@ -25,6 +34,10 @@ public class Config
     public bool DockAutoHide { get; set; }
     /// <summary>Slide the auto-hiding dock out and in; off, it disappears and appears at once.</summary>
     public bool DockAutoHideAnimation { get; set; } = true;
+    /// <summary>Tray icon identifiers in menu bar order, set by Ctrl+dragging; null keeps network and volume next to the clock.</summary>
+    public string[]? TrayOrder { get; set; }
+    /// <summary>Top-left, top-right, bottom-left, bottom-right.</summary>
+    public HotCorner[] HotCorners { get; set; } = { new(), new(), new(), new() };
 
     public static Config Load()
     {
@@ -33,6 +46,7 @@ public class Config
             if (File.Exists(FilePath) && JsonSerializer.Deserialize<Config>(File.ReadAllText(FilePath)) is { } loaded)
             {
                 loaded.DockIconSize = Math.Clamp(loaded.DockIconSize, MinIconSize, MaxIconSize); // hand-edited file
+                if (loaded.HotCorners is not { Length: 4 } || loaded.HotCorners.Any(c => c is null)) loaded.HotCorners = new Config().HotCorners;
                 return loaded;
             }
         }

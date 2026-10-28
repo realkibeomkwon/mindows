@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:Mindows"
-        Title="Mindows 설정" Width="720" Height="480" MinWidth="560" MinHeight="320"
+        Title="Mindows 설정" Width="820" Height="480" MinWidth="560" MinHeight="320"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource WindowBg}" Foreground="{DynamicResource MenuFg}"
         FontFamily="{StaticResource UiFont}" FontSize="13">
@@ -103,6 +103,45 @@
             </Setter>
         </Style>
 
+        <!-- A macOS pop-up button: the current choice and an up/down chevron; clicking opens the choices as a menu. -->
+        <Style x:Key="PopupButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource MenuFg}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Height="30" CornerRadius="6" Padding="10,0,6,0" BorderThickness="2"
+                                Background="{DynamicResource MenuBorder}" BorderBrush="Transparent">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center" Margin="6,0,0,0">
+                                    <TextBlock Text="&#xE70E;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="8"/>
+                                    <TextBlock Text="&#xE70D;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="8"/>
+                                </StackPanel>
+                                <ContentPresenter VerticalAlignment="Center">
+                                    <ContentPresenter.Resources>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                        </Style>
+                                    </ContentPresenter.Resources>
+                                </ContentPresenter>
+                            </DockPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- The corner marks on the hot corners preview. -->
+        <Style x:Key="CornerMark" TargetType="Path">
+            <Setter Property="Fill" Value="White"/>
+            <Setter Property="Stroke" Value="#99000000"/>
+            <Setter Property="StrokeThickness" Value="1"/>
+            <Setter Property="Margin" Value="3"/>
+        </Style>
+
         <Style TargetType="Slider">
             <Setter Property="Template">
                 <Setter.Value>
@@ -174,6 +213,16 @@
             </ControlTemplate>
         </TabControl.Template>
 
+        <TabItem Header="일반" Tag="&#xE713;">
+            <Border Style="{StaticResource Card}">
+                <DockPanel Style="{StaticResource Row}">
+                    <CheckBox x:Name="LaunchAtLogin" DockPanel.Dock="Right" Style="{StaticResource Switch}"
+                              AutomationProperties.Name="로그인 시 자동 실행" Click="LaunchAtLogin_Click"/>
+                    <TextBlock Text="로그인 시 자동 실행" VerticalAlignment="Center"/>
+                </DockPanel>
+            </Border>
+        </TabItem>
+
         <TabItem Header="Dock" Tag="&#xE8A9;">
             <StackPanel>
                 <Border Style="{StaticResource Card}">
@@ -226,6 +275,38 @@
                     </StackPanel>
                 </Border>
             </StackPanel>
+        </TabItem>
+
+        <TabItem Header="핫 코너" Tag="&#xE740;">
+            <Border Style="{StaticResource Card}">
+                <Grid Margin="0,14">
+                    <Grid.RowDefinitions>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="CornerTopLeft" Style="{StaticResource PopupButton}" VerticalAlignment="Top"
+                            AutomationProperties.Name="왼쪽 위 핫 코너" Click="Corner_Click"/>
+                    <Button x:Name="CornerBottomLeft" Grid.Row="1" Style="{StaticResource PopupButton}" VerticalAlignment="Bottom"
+                            AutomationProperties.Name="왼쪽 아래 핫 코너" Click="Corner_Click"/>
+                    <Button x:Name="CornerTopRight" Grid.Column="2" Style="{StaticResource PopupButton}" VerticalAlignment="Top"
+                            AutomationProperties.Name="오른쪽 위 핫 코너" Click="Corner_Click"/>
+                    <Button x:Name="CornerBottomRight" Grid.Row="1" Grid.Column="2" Style="{StaticResource PopupButton}"
+                            VerticalAlignment="Bottom" AutomationProperties.Name="오른쪽 아래 핫 코너" Click="Corner_Click"/>
+                    <!-- The desktop picture, its corners marked; the gray shows when there is no picture. -->
+                    <Grid Grid.Column="1" Grid.RowSpan="2" Width="150" Height="94" Margin="14,0" Background="{DynamicResource MenuBorder}">
+                        <Image x:Name="WallpaperPreview" Stretch="UniformToFill"/>
+                        <Path Style="{StaticResource CornerMark}" Data="M1,1 L13,1 L1,13 Z" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                        <Path Style="{StaticResource CornerMark}" Data="M1,1 L13,1 L13,13 Z" HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                        <Path Style="{StaticResource CornerMark}" Data="M1,1 L1,13 L13,13 Z" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
+                        <Path Style="{StaticResource CornerMark}" Data="M13,1 L13,13 L1,13 Z" HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
+                    </Grid>
+                </Grid>
+            </Border>
         </TabItem>
     </TabControl>
 </Window>

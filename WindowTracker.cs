@@ -22,7 +22,8 @@ static class WindowTracker
         if ((ex & WS_EX_APPWINDOW) == 0 && (ex & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) != 0) return false;
         // Cloaked: suspended UWP frames, windows on other virtual desktops.
         if (DwmGetWindowAttribute(h, 14, out var cloaked, sizeof(int)) == 0 && cloaked != 0) return false;
-        return GetWindowTextLength(h) > 0 && !ShellClasses.Contains(ClassName(h));
+        // WS_EX_APPWINDOW asks for a taskbar button even without a title (e.g. WPF windows with an empty Title).
+        return ((ex & WS_EX_APPWINDOW) != 0 || GetWindowTextLength(h) > 0) && !ShellClasses.Contains(ClassName(h));
     }
 
     /// <summary>App windows in z-order, topmost first.</summary>
@@ -62,6 +63,15 @@ static class WindowTracker
                 var frameKey = Config.AppsFolder + frameAumid;
                 return new(frameKey, exe, names.GetValueOrDefault(frameKey) ?? WindowText(h));
             }
+        }
+        // Chrome's installed web apps run in the browser's process but tag their windows with the app ID of their
+        // Start menu shortcut; plain browser windows carry a profile ID that no shortcut has, so they stay with chrome.exe.
+        if (aumid == null && Path.GetFileName(exe).Equals("chrome.exe", StringComparison.OrdinalIgnoreCase)
+            && WindowAumid(h) is { } webApp && webApp.Contains("._crx_"))
+        {
+            var appKey = Config.AppsFolder + webApp;
+            if (!names.TryGetValue(appKey, out var appName)) names[appKey] = appName = ShellItemName(appKey) ?? WindowText(h);
+            return new(appKey, exe, appName);
         }
         var key = aumid != null ? Config.AppsFolder + aumid : exe;
         return new(key, exe, NameOf(key, exe));

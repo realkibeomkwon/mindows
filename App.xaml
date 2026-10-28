@@ -5,7 +5,8 @@
     <Application.Resources>
         <!-- Theme brushes (BarBg, BarFg, MenuBg, ...) are set in App.ApplyTheme. -->
         <SolidColorBrush x:Key="Accent" Color="#2F6FE4"/>
-        <FontFamily x:Key="UiFont">Segoe UI Variable Text, Segoe UI</FontFamily>
+        <!-- Pretendard is close to the macOS system font; it is often not installed, so Windows' own UI font follows. -->
+        <FontFamily x:Key="UiFont">Pretendard, Segoe UI Variable Text, Segoe UI</FontFamily>
 
         <Style TargetType="ContextMenu">
             <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>

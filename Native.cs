@@ -7,6 +7,9 @@ namespace Mindows;
 public struct RECT { public int Left, Top, Right, Bottom; }
 
 [StructLayout(LayoutKind.Sequential)]
+public struct POINT { public int X, Y; }
+
+[StructLayout(LayoutKind.Sequential)]
 public struct APPBARDATA
 {
     public int cbSize;
@@ -29,7 +32,7 @@ static class Native
     public const int GWL_EXSTYLE = -20;
     public const long WS_EX_TOOLWINDOW = 0x80, WS_EX_APPWINDOW = 0x40000, WS_EX_NOACTIVATE = 0x8000000;
     public const int SW_HIDE = 0, SW_MAXIMIZE = 3, SW_SHOW = 5, SW_MINIMIZE = 6, SW_RESTORE = 9;
-    public const uint WM_CLOSE = 0x10, GW_OWNER = 4, SWP_NOACTIVATE = 0x10;
+    public const uint WM_CLOSE = 0x10, GW_OWNER = 4, SWP_NOSIZE = 1, SWP_NOZORDER = 4, SWP_NOACTIVATE = 0x10;
     public const uint ABM_NEW = 0, ABM_REMOVE = 1, ABM_QUERYPOS = 2, ABM_SETPOS = 3, ABM_GETSTATE = 4, ABM_SETSTATE = 10;
     public static readonly IntPtr HWND_TOPMOST = new(-1);
 
@@ -45,6 +48,7 @@ static class Native
     [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr h);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern bool AllowSetForegroundWindow(uint pid);
     [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] public static extern IntPtr GetWindowLongPtr(IntPtr h, int index);
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")] public static extern IntPtr SetWindowLongPtr(IntPtr h, int index, IntPtr value);
@@ -56,10 +60,23 @@ static class Native
     [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc proc, IntPtr l);
     [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr parent, EnumProc proc, IntPtr l);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT rect);
+    [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
+    [DllImport("win32u.dll")] static extern int NtUserBuildHwndList(IntPtr desktop, IntPtr parent, bool children, bool removeImmersive, uint thread, uint max, [Out] IntPtr[] list, out uint count);
+    [DllImport("user32.dll")] static extern bool PrintWindow(IntPtr h, IntPtr dc, uint flags);
+    [DllImport("gdi32.dll")] static extern IntPtr CreateCompatibleDC(IntPtr dc);
+    [DllImport("gdi32.dll")] static extern IntPtr CreateDIBSection(IntPtr dc, ref BITMAPINFOHEADER bi, uint usage, out IntPtr bits, IntPtr section, uint offset);
+    [DllImport("gdi32.dll")] static extern IntPtr SelectObject(IntPtr dc, IntPtr obj);
+    [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr obj);
+    [DllImport("gdi32.dll")] static extern bool DeleteDC(IntPtr dc);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern uint RegisterWindowMessage(string name);
     [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
     [DllImport("user32.dll")] public static extern bool LockWorkStation();
     [DllImport("user32.dll")] public static extern int GetDoubleClickTime();
+    [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vk);
+    [DllImport("user32.dll")] public static extern IntPtr GetKeyboardLayout(uint thread);
+    [DllImport("imm32.dll")] public static extern IntPtr ImmGetDefaultIMEWnd(IntPtr h);
+    [DllImport("user32.dll")] public static extern IntPtr SendMessageTimeout(IntPtr h, uint msg, IntPtr w, IntPtr l, uint flags, uint timeout, out IntPtr result);
     [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(long point);
     [DllImport("user32.dll")] public static extern IntPtr SetWindowsHookEx(int id, HookProc proc, IntPtr module, uint threadId);
     [DllImport("user32.dll")] public static extern bool UnhookWindowsHookEx(IntPtr hook);
@@ -80,9 +97,68 @@ static class Native
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern int GetApplicationUserModelId(IntPtr h, ref int len, StringBuilder sb);
     [DllImport("kernel32.dll")] public static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS status);
     [DllImport("powrprof.dll")] public static extern bool SetSuspendState(bool hibernate, bool force, bool wakeupEventsDisabled);
+    [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
+    [DllImport("user32.dll")] public static extern IntPtr GetShellWindow();
+    [DllImport("user32.dll")] public static extern bool SystemParametersInfo(uint action, uint param, ref int value, uint winIni);
+    [DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);
 
     [StructLayout(LayoutKind.Sequential)]
     struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public uint dwFlags; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct BITMAPINFOHEADER
+    {
+        public int biSize, biWidth, biHeight;
+        public short biPlanes, biBitCount;
+        public int biCompression, biSizeImage, biXPelsPerMeter, biYPelsPerMeter, biClrUsed, biClrImportant;
+    }
+
+    /// <summary>Top-level windows including the shell's immersive ones (Search, Start), which EnumWindows leaves out.</summary>
+    // shortcut: undocumented win32u call (what EnumWindows uses, minus its immersive filter); on any failure
+    // this returns nothing and callers fall back to finding those windows when they come to the front.
+    public static IntPtr[] AllTopLevelWindows()
+    {
+        var list = new IntPtr[8192];
+        try
+        {
+            if (NtUserBuildHwndList(IntPtr.Zero, IntPtr.Zero, false, false, 0, (uint)list.Length, list, out var count) == 0)
+                return list[..(int)Math.Min(count, (uint)list.Length)];
+        }
+        catch (Exception e) when (e is EntryPointNotFoundException or DllNotFoundException) { }
+        return Array.Empty<IntPtr>();
+    }
+
+    /// <summary>
+    /// Top edge, in window pixels, of what another process's window draws down its center column, or with
+    /// <paramref name="bottom"/> its bottom edge. Captured with PW_RENDERFULLCONTENT, its transparent parts come out black.
+    /// </summary>
+    public static int? ContentEdge(IntPtr h, bool bottom)
+    {
+        GetWindowRect(h, out var r);
+        // Only the left half up to the center column is captured: the cost scales with the area, and PrintWindow ignores a viewport offset.
+        int w = (r.Right - r.Left) / 2 + 1, height = r.Bottom - r.Top;
+        if (w <= 1 || height <= 0) return null;
+        var bi = new BITMAPINFOHEADER { biSize = Marshal.SizeOf<BITMAPINFOHEADER>(), biWidth = w, biHeight = -height, biPlanes = 1, biBitCount = 32 };
+        var dc = CreateCompatibleDC(IntPtr.Zero);
+        var bmp = CreateDIBSection(dc, ref bi, 0, out var bits, IntPtr.Zero, 0); // top-down, so row y starts at y * w
+        var old = SelectObject(dc, bmp);
+        try
+        {
+            if (bmp == IntPtr.Zero || !PrintWindow(h, dc, 2)) return null;
+            for (var i = 0; i < height; i++)
+            {
+                var y = bottom ? height - 1 - i : i;
+                if ((Marshal.ReadInt32(bits, (y * w + w - 1) * 4) & 0xFFFFFF) != 0) return bottom ? y + 1 : y;
+            }
+            return null;
+        }
+        finally
+        {
+            SelectObject(dc, old);
+            DeleteObject(bmp);
+            DeleteDC(dc);
+        }
+    }
 
     /// <summary>Primary monitor bounds in physical pixels and its DPI scale.</summary>
     public static (RECT bounds, double scale) PrimaryMonitor()
@@ -142,6 +218,126 @@ static class Native
         }
         finally { Marshal.ReleaseComObject(store); }
     }
+
+    [DllImport("wlanapi.dll")] static extern int WlanOpenHandle(uint version, IntPtr reserved, out uint negotiated, out IntPtr handle);
+    [DllImport("wlanapi.dll")] static extern int WlanEnumInterfaces(IntPtr handle, IntPtr reserved, out IntPtr list);
+    [DllImport("wlanapi.dll")]
+    static extern int WlanQueryInterface(IntPtr handle, ref Guid iface, int opcode, IntPtr reserved, out int size, out IntPtr data, IntPtr type);
+    [DllImport("wlanapi.dll")] static extern void WlanFreeMemory(IntPtr memory);
+    static IntPtr wlan;
+
+    /// <summary>Signal quality (0–100) of the connected Wi-Fi network; null when none is connected.</summary>
+    public static int? WifiSignal()
+    {
+        if (wlan == IntPtr.Zero && WlanOpenHandle(2, IntPtr.Zero, out _, out wlan) != 0) return null;
+        if (WlanEnumInterfaces(wlan, IntPtr.Zero, out var list) != 0) return null;
+        try
+        {
+            for (var i = 0; i < Marshal.ReadInt32(list); i++)
+            {
+                var info = list + 8 + i * 532; // WLAN_INTERFACE_INFO: GUID, description[256], state
+                if (Marshal.ReadInt32(info, 528) != 1) continue; // wlan_interface_state_connected
+                var id = Marshal.PtrToStructure<Guid>(info);
+                if (WlanQueryInterface(wlan, ref id, 7, IntPtr.Zero, out _, out var connection, IntPtr.Zero) != 0) continue; // current_connection
+                try { return Marshal.ReadInt32(connection, 576); } // WLAN_CONNECTION_ATTRIBUTES.wlanAssociationAttributes.wlanSignalQuality
+                finally { WlanFreeMemory(connection); }
+            }
+            return null;
+        }
+        finally { WlanFreeMemory(list); }
+    }
+
+    [ComImport, Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IShellItem
+    {
+        void BindToHandler(); // never called; keeps GetDisplayName in its vtable slot
+        void GetParent();
+        [PreserveSig] int GetDisplayName(uint sigdn, [MarshalAs(UnmanagedType.LPWStr)] out string name);
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    static extern int SHCreateItemFromParsingName(string path, IntPtr bindCtx, ref Guid iid, [MarshalAs(UnmanagedType.Interface)] out IShellItem item);
+
+    /// <summary>Display name of a shell item, e.g. an installed web app's name for its shell:AppsFolder path.</summary>
+    public static string? ShellItemName(string path)
+    {
+        var iid = typeof(IShellItem).GUID;
+        if (SHCreateItemFromParsingName(path, IntPtr.Zero, ref iid, out var item) != 0) return null;
+        try { return item.GetDisplayName(0, out var name) == 0 ? name : null; } // SIGDN_NORMALDISPLAY
+        finally { Marshal.ReleaseComObject(item); }
+    }
+
+    [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class MMDeviceEnumerator { }
+
+    [ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDeviceEnumerator
+    {
+        void EnumAudioEndpoints(); // never called; keeps GetDefaultAudioEndpoint in its vtable slot
+        [PreserveSig] int GetDefaultAudioEndpoint(int flow, int role, out IMMDevice device);
+    }
+
+    [ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDevice
+    {
+        void Activate(ref Guid iid, int clsCtx, IntPtr activationParams, [MarshalAs(UnmanagedType.IUnknown)] out object iface);
+    }
+
+    [ComImport, Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioEndpointVolume
+    {
+        void RegisterControlChangeNotify(); // never called; keep the others in their vtable slots
+        void UnregisterControlChangeNotify();
+        void GetChannelCount();
+        void SetMasterVolumeLevel();
+        void SetMasterVolumeLevelScalar(float level, IntPtr context);
+        void GetMasterVolumeLevel();
+        void GetMasterVolumeLevelScalar(out float level);
+        void SetChannelVolumeLevel();
+        void SetChannelVolumeLevelScalar();
+        void GetChannelVolumeLevel();
+        void GetChannelVolumeLevelScalar();
+        void SetMute([MarshalAs(UnmanagedType.Bool)] bool mute, IntPtr context);
+        void GetMute([MarshalAs(UnmanagedType.Bool)] out bool mute);
+    }
+
+    static IMMDeviceEnumerator? audioDevices;
+
+    /// <summary>Runs <paramref name="f"/> on the default speakers' volume, looked up each time so a device switch is followed; null when there are none.</summary>
+    static T? Speakers<T>(Func<IAudioEndpointVolume, T> f) where T : struct
+    {
+        try
+        {
+            audioDevices ??= (IMMDeviceEnumerator)new MMDeviceEnumerator();
+            if (audioDevices.GetDefaultAudioEndpoint(0, 1, out var device) != 0) return null; // eRender, eMultimedia
+            try
+            {
+                var iid = typeof(IAudioEndpointVolume).GUID;
+                device.Activate(ref iid, 1, IntPtr.Zero, out var o); // CLSCTX_INPROC_SERVER
+                var volume = (IAudioEndpointVolume)o;
+                try { return f(volume); }
+                finally { Marshal.ReleaseComObject(volume); }
+            }
+            finally { Marshal.ReleaseComObject(device); }
+        }
+        catch (COMException) { return null; } // unplugged mid-call, or the audio service is stopped
+    }
+
+    /// <summary>The default speakers' volume (0–100) and mute; null when there are none.</summary>
+    public static (int volume, bool muted)? Volume() => Speakers(v =>
+    {
+        v.GetMasterVolumeLevelScalar(out var level);
+        v.GetMute(out var muted);
+        return ((int)Math.Round(level * 100), muted);
+    });
+
+    /// <summary>Moves the default speakers' volume by <paramref name="step"/> percent; turning it up unmutes, as the volume keys do.</summary>
+    public static void StepVolume(int step) => Speakers(v =>
+    {
+        v.GetMasterVolumeLevelScalar(out var level);
+        v.SetMasterVolumeLevelScalar(Math.Clamp((int)Math.Round(level * 100) + step, 0, 100) / 100f, IntPtr.Zero);
+        if (step > 0) v.SetMute(false, IntPtr.Zero);
+        return 0;
+    });
 
     public static string WindowText(IntPtr h)
     {

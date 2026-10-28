@@ -1,14 +1,61 @@
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 
 namespace Mindows;
 
-/// <summary>Large shell icons for exe paths, shell:AppsFolder items and shell folders, cached per path.</summary>
+/// <summary>
+/// Large shell icons for exe paths, shell:AppsFolder items and shell folders, cached per path.
+/// The cache and <see cref="Arrived"/> belong to the UI thread; <see cref="TryGet"/> loads on a background thread.
+/// </summary>
 static class IconLoader
 {
     const int Size = 128;
     static readonly Dictionary<string, ImageSource?> cache = new(StringComparer.OrdinalIgnoreCase);
+    static readonly HashSet<string> pending = new(StringComparer.OrdinalIgnoreCase);
+    static readonly BlockingCollection<string> queue = new();
+    static Dispatcher? ui;
+
+    /// <summary>Raised on the UI thread each time an icon asked for with <see cref="TryGet"/> is loaded.</summary>
+    public static event Action? Arrived;
+
+    /// <summary>
+    /// The icon if it is loaded (null when the path has none); otherwise false, and it loads in the background.
+    /// At sign-in a single icon can take seconds, which would keep the bars from drawing.
+    /// </summary>
+    public static bool TryGet(string path, out ImageSource? image)
+    {
+        if (cache.TryGetValue(path, out image)) return true;
+        if (pending.Add(path))
+        {
+            if (ui == null) StartLoader();
+            queue.Add(path);
+        }
+        return false;
+    }
+
+    static void StartLoader()
+    {
+        var dispatcher = ui = Dispatcher.CurrentDispatcher;
+        // Shell objects want an STA thread; the CLR's blocking wait below pumps COM messages for it.
+        var thread = new Thread(() =>
+        {
+            foreach (var path in queue.GetConsumingEnumerable())
+            {
+                var image = Load(path); // frozen, so the UI thread can use it
+                dispatcher.InvokeAsync(() =>
+                {
+                    cache[path] = image;
+                    pending.Remove(path);
+                    Arrived?.Invoke();
+                });
+            }
+        }) { IsBackground = true, Name = "IconLoader" };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+    }
 
     [ComImport, Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     interface IShellItemImageFactory
@@ -41,6 +88,9 @@ static class IconLoader
 
     [DllImport("gdi32.dll")] static extern int GetObject(IntPtr h, int size, out DIBSECTION dib);
     [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr h);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    static extern uint PrivateExtractIcons(string file, int index, int cx, int cy, IntPtr[] icons, int[]? ids, uint count, uint flags);
+    [DllImport("user32.dll")] static extern bool DestroyIcon(IntPtr h);
 
     public static ImageSource? Get(string path)
     {
@@ -50,6 +100,19 @@ static class IconLoader
 
     static ImageSource? Load(string path)
     {
+        // The shell pads an exe icon without a 256px image to a 48px one centered in the frame; its own resource scales.
+        if (path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            var icons = new IntPtr[1];
+            if (PrivateExtractIcons(path, 0, Size, Size, icons, null, 1, 0) is 1 && icons[0] != IntPtr.Zero)
+                try
+                {
+                    var source = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(icons[0], System.Windows.Int32Rect.Empty, null);
+                    source.Freeze();
+                    return source;
+                }
+                finally { DestroyIcon(icons[0]); }
+        }
         IShellItemImageFactory factory;
         try { SHCreateItemFromParsingName(path, IntPtr.Zero, typeof(IShellItemImageFactory).GUID, out factory); }
         catch (Exception e) when (e is COMException or FileNotFoundException or ArgumentException) { return null; }
