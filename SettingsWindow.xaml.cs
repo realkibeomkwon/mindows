@@ -1,9 +1,12 @@
 using System.Security;
 using System.Security.Principal;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using static Mindows.Native;
 
@@ -53,7 +56,79 @@ public partial class SettingsWindow : Window
         Magnification.IsChecked = config.DockMagnification;
         AutoHide.IsChecked = config.DockAutoHide;
         AutoHideAnimation.IsChecked = config.DockAutoHideAnimation;
+        for (var i = 0; i < 4; i++) CornerButtons[i].Content = HotCorners.Describe(config.HotCorners[i].Action, config.HotCorners[i].Modifiers);
+        WallpaperPreview.Source = Wallpaper();
         syncing = false;
+    }
+
+    Button[] CornerButtons => new[] { CornerTopLeft, CornerTopRight, CornerBottomLeft, CornerBottomRight }; // Config.HotCorners order
+
+    /// <summary>
+    /// As on macOS, the modifiers held when an action is picked must be held at the corner too; the menu shows them while
+    /// they are held.
+    /// </summary>
+    void Corner_Click(object sender, RoutedEventArgs e)
+    {
+        var button = (Button)sender;
+        var corner = config.HotCorners[Array.IndexOf(CornerButtons, button)];
+        var menu = new ContextMenu { PlacementTarget = button, Placement = PlacementMode.Bottom };
+        var items = new List<(MenuItem item, HotCornerAction action)>();
+        foreach (var action in HotCorners.Menu)
+        {
+            if (action is not { } a)
+            {
+                menu.Items.Add(new Separator());
+                continue;
+            }
+            var item = new MenuItem { IsChecked = a == corner.Action };
+            item.Click += (_, _) =>
+            {
+                corner.Action = a;
+                corner.Modifiers = a == HotCornerAction.None ? 0 : HotCorners.HeldModifiers();
+                config.Save();
+                HotCorners.Apply();
+                Sync();
+            };
+            menu.Items.Add(item);
+            items.Add((item, a));
+        }
+
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+        void Relabel()
+        {
+            HotCorners.MaskWin();
+            var held = HotCorners.HeldModifiers();
+            foreach (var (item, action) in items) item.Header = HotCorners.Describe(action, held);
+        }
+        Relabel();
+        timer.Tick += (_, _) => Relabel();
+        timer.Start();
+        menu.Closed += (_, _) => timer.Stop();
+        // Alt is a modifier here, not a key that leaves the menu.
+        menu.PreviewKeyDown += (_, k) => k.Handled |= k.Key == Key.System;
+        menu.PreviewKeyUp += (_, k) => k.Handled |= k.Key == Key.System;
+        menu.IsOpen = true;
+    }
+
+    /// <summary>The desktop picture as Windows last drew it; null for a solid color or a missing file.</summary>
+    static BitmapImage? Wallpaper()
+    {
+        try
+        {
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.UriSource = new Uri(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                @"Microsoft\Windows\Themes\TranscodedWallpaper"));
+            image.CacheOption = BitmapCacheOption.OnLoad; // Windows rewrites the file when the wallpaper changes
+            image.DecodePixelWidth = 300;
+            image.EndInit();
+            image.Freeze();
+            return image;
+        }
+        catch (Exception e) when (e is IOException or NotSupportedException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     // While the thumb is dragged the dock resizes live; the drop (or a click or key press) re-reserves the strip and saves.

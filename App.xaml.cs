@@ -46,6 +46,7 @@ public partial class App : Application
         var dock = new DockWindow(config);
         new MenuBarWindow(shell?.NotificationArea, config, dock, () => SettingsWindow.Open(config, dock)).Show();
         dock.Show();
+        HotCorners.Start(config);
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -77,6 +78,7 @@ public partial class App : Application
         try { shell?.Dispose(); }
         catch (Exception e) { Log(e); } // restoring the taskbar below matters more
         shell = null;
+        HotCorners.Stop(); // gives back the screen saver if the pointer rests in a Disable Screen Saver corner
         AppBar.RemoveAll();
         Taskbar.Restore();
     }

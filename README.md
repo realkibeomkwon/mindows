@@ -62,6 +62,13 @@ iscc installer\Mindows.iss
 
 - 일반: 로그인 시 자동 실행. 작업 스케줄러에 로그온 시 실행되는 `Mindows` 작업을 등록하며, 지금 실행 중인 Mindows.exe의 경로가 기록됩니다. `HKCU\...\CurrentVersion\Run`과 달리 Explorer의 시작 프로그램 지연을 기다리지 않으므로 로그인 직후 실행됩니다.
 - Dock: 크기(슬라이더 또는 숫자 입력), 확대 효과, 자동으로 Dock 가리기 및 보기, 가리기 및 보기 애니메이션(끄면 즉시 사라지고 나타남)
+- 핫 코너: 주 모니터의 네 모서리에 마우스 포인터를 밀어 넣으면 실행할 동작을 고릅니다. 미리 보기에는 현재 바탕 화면 그림이 표시됩니다. macOS처럼 보조 키를 누른 채 동작을 고르면, 모서리에서도 같은 보조 키를 누르고 있어야 동작이 실행됩니다. 보조 키는 Ctrl, Win, Alt, Shift이며, 같은 키를 계속 누른 채 모서리에 다시 가져가면 동작이 다시 실행됩니다. 동작은 Windows 기능으로 다음과 같이 실행합니다.
+  - Mission Control, 응용 프로그램 윈도우: 작업 보기(Win+Tab). Windows에는 한 앱의 창만 보여 주는 화면이 없어서 둘 다 작업 보기를 엽니다.
+  - 데스크탑: 앱 창을 모두 최소화하고, 다시 실행하면 최소화했던 창을 원래 쌓인 순서대로 되돌립니다(Win+D는 되돌릴 때마다 순서가 바뀝니다).
+  - 알림 센터: Win+N / 앱: 시작 메뉴 / 빠른 메모: 메모장
+  - 화면 보호기 시작: 지정한 화면 보호기를 실행하며, 지정하지 않았다면 기본 제공되는 빈 화면 보호기를 실행합니다.
+  - 화면 보호기 비활성화: 포인터가 모서리에 머무는 동안 화면 보호기와 디스플레이 끄기를 막습니다.
+  - 디스플레이를 잠자기 상태로 전환: 모니터를 끕니다 / 화면 잠금: Win+L과 같습니다.
 
 설정은 `%APPDATA%\Mindows\config.json`에 저장되며, 다음 항목을 직접 편집할 수도 있습니다.
 
@@ -70,6 +77,7 @@ iscc installer\Mindows.iss
 - `DockMagnification`: 확대 효과 사용 여부
 - `DockAutoHide`: Dock 자동 가리기 사용 여부
 - `DockAutoHideAnimation`: 자동 가리기 시 미끄러지는 애니메이션 사용 여부
+- `HotCorners`: 왼쪽 위, 오른쪽 위, 왼쪽 아래, 오른쪽 아래 순서의 핫 코너. `Action`은 동작 이름(`None`, `MissionControl`, `ApplicationWindows`, `Desktop`, `NotificationCenter`, `Apps`, `QuickNote`, `StartScreenSaver`, `DisableScreenSaver`, `DisplaySleep`, `LockScreen`), `Modifiers`는 함께 눌러야 하는 키(`Control`, `Alt`, `Shift`, `Windows`를 쉼표로 구분)입니다.
 
 오류가 발생하면 같은 폴더의 `crash.log`에 기록됩니다.
 
@@ -77,6 +85,7 @@ iscc installer\Mindows.iss
 
 - 주 모니터만 지원합니다.
 - 관리자 권한으로 실행된 앱의 트레이 아이콘은 클릭에 반응하지 않을 수 있습니다(Windows의 권한 격리, UIPI). 이 경우 Mindows를 관리자 권한으로 실행해야 할 수 있습니다.
+- 같은 이유로, 관리자 권한으로 실행된 앱이 활성 창인 동안에는 보조 키를 눌러도 Mindows가 읽지 못하므로 보조 키가 지정된 핫 코너가 동작하지 않습니다. 보조 키 없이 지정한 핫 코너는 동작합니다.
 - Mindows가 실행되는 동안 다른 앱의 작업 표시줄 상태 조회(`ABM_GETSTATE` 등)는 ManagedShell이 응답합니다.
 - 앱별 전역 메뉴(파일/편집/보기 등), Mission Control, Launchpad, Spotlight, 탐색기에서 Dock으로 끌어 놓기, 자동 시작은 구현하지 않았습니다.
 - 테마(라이트/다크)는 시작할 때 한 번만 읽습니다.
