@@ -22,7 +22,8 @@ static class WindowTracker
         if ((ex & WS_EX_APPWINDOW) == 0 && (ex & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) != 0) return false;
         // Cloaked: suspended UWP frames, windows on other virtual desktops.
         if (DwmGetWindowAttribute(h, 14, out var cloaked, sizeof(int)) == 0 && cloaked != 0) return false;
-        return GetWindowTextLength(h) > 0 && !ShellClasses.Contains(ClassName(h));
+        // WS_EX_APPWINDOW asks for a taskbar button even without a title (e.g. WPF windows with an empty Title).
+        return ((ex & WS_EX_APPWINDOW) != 0 || GetWindowTextLength(h) > 0) && !ShellClasses.Contains(ClassName(h));
     }
 
     /// <summary>App windows in z-order, topmost first.</summary>

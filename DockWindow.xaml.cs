@@ -604,7 +604,7 @@ public partial class DockWindow : Window
         }
         else
         {
-            foreach (var h in s.Windows) items.Add(Menus.Item(WindowText(h), () => Sys.Focus(h)));
+            foreach (var h in s.Windows) items.Add(Menus.Item(WindowText(h) is { Length: > 0 } t ? t : s.Name, () => Sys.Focus(h)));
             if (s.Windows.Count > 0) items.Add(null);
             if (Browsers.TryGetValue(System.IO.Path.GetFileName(s.Key), out var b))
             {

@@ -518,7 +518,7 @@ public partial class MenuBarWindow : Window
         {
             items.Add(null);
             foreach (var w in ForegroundAppWindows())
-                items.Add(Menus.Item(WindowText(w), () => Sys.Focus(w), isChecked: w == h));
+                items.Add(Menus.Item(WindowText(w) is { Length: > 0 } t ? t : foregroundApp!.Name, () => Sys.Focus(w), isChecked: w == h));
         }
         Menus.Show(WindowButton, PlacementMode.Bottom, items);
     }
