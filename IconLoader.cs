@@ -88,6 +88,9 @@ static class IconLoader
 
     [DllImport("gdi32.dll")] static extern int GetObject(IntPtr h, int size, out DIBSECTION dib);
     [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr h);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    static extern uint PrivateExtractIcons(string file, int index, int cx, int cy, IntPtr[] icons, int[]? ids, uint count, uint flags);
+    [DllImport("user32.dll")] static extern bool DestroyIcon(IntPtr h);
 
     public static ImageSource? Get(string path)
     {
@@ -97,6 +100,19 @@ static class IconLoader
 
     static ImageSource? Load(string path)
     {
+        // The shell pads an exe icon without a 256px image to a 48px one centered in the frame; its own resource scales.
+        if (path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            var icons = new IntPtr[1];
+            if (PrivateExtractIcons(path, 0, Size, Size, icons, null, 1, 0) is 1 && icons[0] != IntPtr.Zero)
+                try
+                {
+                    var source = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(icons[0], System.Windows.Int32Rect.Empty, null);
+                    source.Freeze();
+                    return source;
+                }
+                finally { DestroyIcon(icons[0]); }
+        }
         IShellItemImageFactory factory;
         try { SHCreateItemFromParsingName(path, IntPtr.Zero, typeof(IShellItemImageFactory).GUID, out factory); }
         catch (Exception e) when (e is COMException or FileNotFoundException or ArgumentException) { return null; }
