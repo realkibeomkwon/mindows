@@ -43,7 +43,7 @@ public partial class App : Application
         // Hide first: the tray host takes over the Shell_TrayWnd class, and the state file must hold Explorer's state.
         Taskbar.Hide();
         shell = StartTrayHost(config.TrayOrder);
-        var dock = new DockWindow(config);
+        var dock = new DockWindow(config) { Tray = shell?.NotificationArea };
         new MenuBarWindow(shell?.NotificationArea, config, dock, () => SettingsWindow.Open(config, dock)).Show();
         dock.Show();
         HotCorners.Start(config);

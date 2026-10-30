@@ -9,6 +9,8 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using ManagedShell.Common.Helpers;
+using ManagedShell.WindowsTray;
 using static Mindows.Native;
 
 namespace Mindows;
@@ -43,6 +45,8 @@ public partial class DockWindow : Window
         public Ellipse? Dot;
         public Rectangle? Line;
     }
+
+    public NotificationArea? Tray { get; set; }
 
     readonly Config config;
     readonly AppBar bar;
@@ -575,11 +579,26 @@ public partial class DockWindow : Window
         else if (s == search) ClickSearch();
         else if (s.Windows.Count == 0)
         {
-            Sys.Launch(s.Key);
+            // A running app that lives in the tray would only get a slow second launch; double-click its icon instead.
+            if (!DoubleClickTrayIcon(s.Key)) Sys.Launch(s.Key);
             Bounce(s);
         }
         // Already in front: cycle to its bottom-most window.
         else Sys.Focus(s.Windows.Contains(GetForegroundWindow()) ? s.Windows[^1] : s.Windows[0]);
+    }
+
+    bool DoubleClickTrayIcon(string exe)
+    {
+        var icon = Tray?.TrayIcons.OfType<NotifyIcon>().FirstOrDefault(i => string.Equals(i.Path, exe, StringComparison.OrdinalIgnoreCase));
+        if (icon == null) return false;
+        AllowSetForegroundWindow(uint.MaxValue);
+        var at = MouseHelper.GetCursorPositionParam();
+        for (var i = 0; i < 2; i++)
+        {
+            icon.IconMouseDown(MouseButton.Left, at, GetDoubleClickTime());
+            icon.IconMouseUp(MouseButton.Left, at, GetDoubleClickTime());
+        }
+        return true;
     }
 
     static void Bounce(Slot s)

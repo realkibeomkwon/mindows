@@ -418,12 +418,14 @@ public partial class MenuBarWindow : Window
             e.Handled = true;
             return;
         }
+        AllowSetForegroundWindow(uint.MaxValue); // ASFW_ANY: the app's window or menu would otherwise stay behind
         TrayIcon(sender).IconMouseDown(e.ChangedButton, MouseHelper.GetCursorPositionParam(), GetDoubleClickTime());
         e.Handled = true;
     }
 
     void Tray_MouseUp(object sender, MouseButtonEventArgs e)
     {
+        AllowSetForegroundWindow(uint.MaxValue);
         TrayIcon(sender).IconMouseUp(e.ChangedButton, MouseHelper.GetCursorPositionParam(), GetDoubleClickTime());
         e.Handled = true;
     }
