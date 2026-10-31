@@ -639,7 +639,7 @@ public partial class DockWindow : Window
             }
             items.Add(Menus.Item("Dock에 유지", () => TogglePin(s), isChecked: s.Pinned));
             if (!s.Key.StartsWith("shell:", StringComparison.OrdinalIgnoreCase))
-                items.Add(Menus.Item("파일 위치 열기", () => Process.Start("explorer.exe", $"/select,\"{s.Key}\"")));
+                items.Add(Menus.Item("파일 위치 열기", () => Sys.Launch("explorer.exe", $"/select,\"{s.Key}\"")));
             items.Add(null);
             items.Add(s.Windows.Count > 0
                 ? Menus.Item("종료", () => s.Windows.ForEach(Sys.Close))

@@ -14,6 +14,7 @@ static class Sys
     {
         try
         {
+            if (LaunchViaExplorer(path, args)) return;
             if (path.StartsWith("shell:", StringComparison.OrdinalIgnoreCase) || path.StartsWith("::"))
                 Process.Start("explorer.exe", path);
             else
@@ -22,6 +23,29 @@ static class Sys
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
             MessageBox.Show($"{path}\n\n{e.Message}", "Mindows", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    /// <summary>
+    /// Has Explorer start the app through its desktop view. A child of this process would inherit the uiAccess token's
+    /// raised integrity, and dock-launched apps must run as a normal user. Returns false when Explorer's desktop is not available.
+    /// </summary>
+    static bool LaunchViaExplorer(string path, string args)
+    {
+        try
+        {
+            dynamic windows = Activator.CreateInstance(Type.GetTypeFromCLSID(new Guid("9BA05972-F6A8-11CF-A442-00A0C90A8F39"))!)!; // ShellWindows
+            object location = 0 /* CSIDL_DESKTOP */, root = Type.Missing;
+            dynamic desktop = windows.FindWindowSW(ref location, ref root, 8 /* SWC_DESKTOP */, out int _, 1 /* SWFO_NEEDDISPATCH */);
+            dynamic shell = desktop.Document.Application;
+            GetWindowThreadProcessId(GetShellWindow(), out var pid);
+            AllowSetForegroundWindow(pid); // the app's window would otherwise open behind
+            shell.ShellExecute(path, args, null, null, 1 /* SW_SHOWNORMAL */);
+            return true;
+        }
+        catch (Exception) // COM failures surface as many exception types; the direct launch is the fallback
+        {
+            return false;
         }
     }
 

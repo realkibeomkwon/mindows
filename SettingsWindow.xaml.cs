@@ -177,7 +177,8 @@ public partial class SettingsWindow : Window
 
     /// <summary>
     /// Starts Mindows as soon as the user signs in. The task's defaults would stop a shell after 3 days or on battery,
-    /// and a hard stop leaves the taskbar hidden.
+    /// and a hard stop leaves the taskbar hidden. The task goes through ShellExecute because CreateProcess
+    /// fails with 740 on a uiAccess exe.
     /// </summary>
     static string LogonTaskXml()
     {
@@ -193,7 +194,7 @@ public partial class SettingsWindow : Window
                 <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
                 <Priority>4</Priority>
               </Settings>
-              <Actions><Exec><Command>{SecurityElement.Escape(Environment.ProcessPath)}</Command></Exec></Actions>
+              <Actions><Exec><Command>rundll32.exe</Command><Arguments>url.dll,FileProtocolHandler "{SecurityElement.Escape(Environment.ProcessPath)}"</Arguments></Exec></Actions>
             </Task>
             """;
     }

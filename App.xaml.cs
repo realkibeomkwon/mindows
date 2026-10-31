@@ -64,6 +64,11 @@ public partial class App : Application
         var config = ShellManager.DefaultShellConfig;
         config.EnableTasksService = false;
         config.PinnedNotifyIcons = trayOrder ?? new[] { NotificationArea.NETWORK_GUID, NotificationArea.VOLUME_GUID };
+        // A uiAccess process runs above the apps that talk to it, so UIPI would drop their tray and app bar data (WM_COPYDATA)
+        // and the TaskbarCreated broadcast.
+        Native.ChangeWindowMessageFilter(0x4A /* WM_COPYDATA */, 1 /* MSGFLT_ADD */);
+        Native.ChangeWindowMessageFilter(Native.RegisterWindowMessage("TaskbarCreated"), 1);
+        Native.ChangeWindowMessageFilter(Native.RegisterWindowMessage("MindowsAppBar"), 1); // AppBar.CallbackMsg, sent by Explorer
         try { return new ShellManager(config); }
         catch (Exception e) // the bars still work without tray icons
         {
