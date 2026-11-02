@@ -589,6 +589,8 @@ public partial class DockWindow : Window
 
     bool DoubleClickTrayIcon(string exe)
     {
+        // Explorer's tray icons are system icons (network, volume), not its windows; double-clicking one opens Settings.
+        if (string.Equals(System.IO.Path.GetFileName(exe), "explorer.exe", StringComparison.OrdinalIgnoreCase)) return false;
         var icon = Tray?.TrayIcons.OfType<NotifyIcon>().FirstOrDefault(i => string.Equals(i.Path, exe, StringComparison.OrdinalIgnoreCase));
         if (icon == null) return false;
         AllowSetForegroundWindow(uint.MaxValue);

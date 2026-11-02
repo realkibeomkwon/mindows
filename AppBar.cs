@@ -113,8 +113,11 @@ sealed class AppBar
         return IntPtr.Zero;
     }
 
-    void UpdateVisibility() =>
+    void UpdateVisibility()
+    {
+        if (hwnd == IntPtr.Zero) return;
         window.Visibility = fullScreenReported && IsFullScreen(GetForegroundWindow()) ? Visibility.Hidden : Visibility.Visible;
+    }
 
     // Explorer also reports a full-screen app once the last window closes and whatever is left takes the foreground:
     // the desktop, the lock screen's screen-sized window that stays visible behind it, or a background app's zero-size window.

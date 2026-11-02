@@ -165,7 +165,7 @@ public partial class MenuBarWindow : Window
     // Over the volume icon, each wheel notch moves the volume 2%.
     void Tray_MouseWheel(object sender, MouseWheelEventArgs e)
     {
-        if (TrayIcon(sender).GUID != new Guid(NotificationArea.VOLUME_GUID)) return;
+        if (TrayIcon(sender)?.GUID != new Guid(NotificationArea.VOLUME_GUID)) return;
         wheelRest += e.Delta;
         StepVolume(wheelRest / 60);
         wheelRest %= 60;
@@ -403,30 +403,32 @@ public partial class MenuBarWindow : Window
         return view;
     }
 
-    static NotifyIcon TrayIcon(object sender) => (NotifyIcon)((FrameworkElement)sender).DataContext;
+    // A container the live filter/sort removed keeps raising mouse events with DataContext {DisconnectedItem}.
+    static NotifyIcon? TrayIcon(object sender) => ((FrameworkElement)sender).DataContext as NotifyIcon;
 
     // The bar never takes focus, so WPF's own modifier state can be stale.
     static bool CtrlDown => (GetAsyncKeyState(0x11) & 0x8000) != 0; // VK_CONTROL
 
     void Tray_MouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (TrayIcon(sender) is not { } icon) return;
         // As Cmd+drag on macOS: Ctrl+drag moves the icon instead of clicking it.
         if (tray != null && e.ChangedButton == MouseButton.Left && CtrlDown)
         {
-            movingIcon = TrayIcon(sender);
+            movingIcon = icon;
             TrayIcons.CaptureMouse(); // not the icon's own element, which re-sorting can take out of the tree
             e.Handled = true;
             return;
         }
         AllowSetForegroundWindow(uint.MaxValue); // ASFW_ANY: the app's window or menu would otherwise stay behind
-        TrayIcon(sender).IconMouseDown(e.ChangedButton, MouseHelper.GetCursorPositionParam(), GetDoubleClickTime());
+        icon.IconMouseDown(e.ChangedButton, MouseHelper.GetCursorPositionParam(), GetDoubleClickTime());
         e.Handled = true;
     }
 
     void Tray_MouseUp(object sender, MouseButtonEventArgs e)
     {
         AllowSetForegroundWindow(uint.MaxValue);
-        TrayIcon(sender).IconMouseUp(e.ChangedButton, MouseHelper.GetCursorPositionParam(), GetDoubleClickTime());
+        TrayIcon(sender)?.IconMouseUp(e.ChangedButton, MouseHelper.GetCursorPositionParam(), GetDoubleClickTime());
         e.Handled = true;
     }
 
@@ -434,7 +436,7 @@ public partial class MenuBarWindow : Window
     {
         if (movingIcon != null) return;
         var element = (FrameworkElement)sender;
-        var icon = TrayIcon(sender);
+        if (TrayIcon(sender) is not { } icon) return;
         // Apps place their flyouts next to this rect (Shell_NotifyIconGetRect); physical pixels.
         var topLeft = element.PointToScreen(new Point(0, 0));
         var bottomRight = element.PointToScreen(new Point(element.ActualWidth, element.ActualHeight));
@@ -447,10 +449,10 @@ public partial class MenuBarWindow : Window
         icon.IconMouseEnter(MouseHelper.GetCursorPositionParam());
     }
 
-    void Tray_MouseLeave(object sender, MouseEventArgs e) => TrayIcon(sender).IconMouseLeave(MouseHelper.GetCursorPositionParam());
+    void Tray_MouseLeave(object sender, MouseEventArgs e) => TrayIcon(sender)?.IconMouseLeave(MouseHelper.GetCursorPositionParam());
     void Tray_MouseMove(object sender, MouseEventArgs e)
     {
-        if (movingIcon == null) TrayIcon(sender).IconMouseMove(MouseHelper.GetCursorPositionParam());
+        if (movingIcon == null) TrayIcon(sender)?.IconMouseMove(MouseHelper.GetCursorPositionParam());
     }
 
     /// <summary>Moves the dragged icon before the first other icon right of the pointer; all shown icons become pinned in that order.</summary>
