@@ -57,6 +57,10 @@
         </StackPanel>
 
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="0,0,8,0">
+            <!-- Tray icons beyond the configured maximum, leftmost of the right side. -->
+            <Button x:Name="TrayOverflow" Style="{StaticResource BarButton}" Padding="8,0" Visibility="Collapsed"
+                    Content="&#xE712;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12"
+                    AutomationProperties.Name="더 보기" Click="TrayOverflow_Click"/>
             <!-- AI usage from UsageBar, a separate app: each provider's mark and the percentage left; clicks open its popup. -->
             <ItemsControl x:Name="UsageItems" VerticalAlignment="Stretch">
                 <ItemsControl.ItemsPanel>

@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using ManagedShell.WindowsTray;
 using Microsoft.Win32;
 using static Mindows.Native;
 
@@ -21,20 +22,22 @@ public partial class SettingsWindow : Window
 
     readonly Config config;
     readonly DockWindow dock;
+    readonly NotificationArea? tray;
+    readonly MenuBarWindow bar;
     bool syncing = true; // InitializeComponent coerces the slider to its minimum; that is not a user change
 
-    public static void Open(Config config, DockWindow dock)
+    public static void Open(Config config, DockWindow dock, NotificationArea? tray, MenuBarWindow bar)
     {
-        open ??= new SettingsWindow(config, dock);
+        open ??= new SettingsWindow(config, dock, tray, bar);
         open.Show();
         // The taskbar is hidden and the dock skips Mindows' windows, so restoring here is the only way back.
         if (open.WindowState == WindowState.Minimized) open.WindowState = WindowState.Normal;
         open.Activate();
     }
 
-    SettingsWindow(Config config, DockWindow dock)
+    SettingsWindow(Config config, DockWindow dock, NotificationArea? tray, MenuBarWindow bar)
     {
-        (this.config, this.dock) = (config, dock);
+        (this.config, this.dock, this.tray, this.bar) = (config, dock, tray, bar);
         InitializeComponent();
         Sync();
         Activated += (_, _) => Sync(); // the dock's resize handle changes the size too
@@ -58,8 +61,62 @@ public partial class SettingsWindow : Window
         AutoHideAnimation.IsChecked = config.DockAutoHideAnimation;
         for (var i = 0; i < 4; i++) CornerButtons[i].Content = HotCorners.Describe(config.HotCorners[i].Action, config.HotCorners[i].Modifiers);
         WallpaperPreview.Source = Wallpaper();
+        MaxTrayBox.Text = $"{config.MaxTrayIcons}";
+        SyncTrayList();
         syncing = false;
     }
+
+    /// <summary>One switch per tray icon the apps have added; icons switched off stay listed so they can be switched back on.</summary>
+    void SyncTrayList()
+    {
+        TrayList.Children.Clear();
+        var icons = tray?.TrayIcons.Cast<NotifyIcon>().Where(MenuBarWindow.Listed).ToList() ?? new();
+        TrayEmpty.Visibility = icons.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var icon in icons)
+        {
+            if (TrayList.Children.Count > 0) TrayList.Children.Add(new Border { Style = (Style)FindResource("RowLine") });
+            var name = MenuBarWindow.IconName(icon);
+            var row = new DockPanel { Style = (Style)FindResource("Row") };
+            var toggle = new CheckBox
+            {
+                Style = (Style)FindResource("Switch"),
+                IsChecked = !config.HiddenTrayIcons.Any(icon.IsEqualByIdentifier),
+            };
+            System.Windows.Automation.AutomationProperties.SetName(toggle, name);
+            toggle.Click += (_, _) =>
+            {
+                var rest = config.HiddenTrayIcons.Where(h => !icon.IsEqualByIdentifier(h));
+                config.HiddenTrayIcons = (toggle.IsChecked == true ? rest : rest.Append(icon.Identifier)).ToArray();
+                config.Save();
+                bar.ApplyTray();
+            };
+            DockPanel.SetDock(toggle, Dock.Right);
+            row.Children.Add(toggle);
+            row.Children.Add(new TextBlock { Text = name, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
+            TrayList.Children.Add(row);
+        }
+    }
+
+    /// <summary>Applies a typed maximum; anything that is not a number puts the current one back.</summary>
+    void CommitMaxTrayBox()
+    {
+        if (int.TryParse(MaxTrayBox.Text, out var max) && max >= 0 && max != config.MaxTrayIcons)
+        {
+            config.MaxTrayIcons = max;
+            config.Save();
+            bar.ApplyTray();
+        }
+        MaxTrayBox.Text = $"{config.MaxTrayIcons}";
+    }
+
+    void MaxTrayBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        CommitMaxTrayBox();
+        MaxTrayBox.SelectAll();
+    }
+
+    void MaxTrayBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) => CommitMaxTrayBox();
 
     Button[] CornerButtons => new[] { CornerTopLeft, CornerTopRight, CornerBottomLeft, CornerBottomRight }; // Config.HotCorners order
 

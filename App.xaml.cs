@@ -44,7 +44,9 @@ public partial class App : Application
         Taskbar.Hide();
         shell = StartTrayHost(config.TrayOrder);
         var dock = new DockWindow(config) { Tray = shell?.NotificationArea };
-        new MenuBarWindow(shell?.NotificationArea, config, dock, () => SettingsWindow.Open(config, dock)).Show();
+        MenuBarWindow bar = null!; // the settings callback runs only after this is assigned
+        bar = new MenuBarWindow(shell?.NotificationArea, config, dock, () => SettingsWindow.Open(config, dock, shell?.NotificationArea, bar));
+        bar.Show();
         dock.Show();
         HotCorners.Start(config);
     }

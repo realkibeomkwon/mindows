@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -33,6 +35,9 @@ public partial class MenuBarWindow : Window
     readonly DockWindow dock;
     readonly NotificationArea? tray;
     NotifyIcon? movingIcon; // tray icon being Ctrl+dragged to a new spot
+    readonly ObservableCollection<NotifyIcon> shownIcons = new(); // the tray icons in the bar
+    List<NotifyIcon> overflowIcons = new(); // the ones beyond Config.MaxTrayIcons, in the overflow menu
+    ListCollectionView? trayView;
 
     // Quick Settings and Search open over Explorer's hidden taskbar at the bottom; while one is open, keep Quick Settings
     // under the menu bar and Search, opened from the dock, just above the dock.
@@ -58,7 +63,13 @@ public partial class MenuBarWindow : Window
         (this.tray, this.config, this.dock, this.openSettings) = (tray, config, dock, openSettings);
         InitializeComponent();
         _ = new AppBar(this, AppBar.Top, () => BarHeight, () => BarHeight);
-        if (tray != null) TrayIcons.ItemsSource = TrayView(tray);
+        if (tray != null)
+        {
+            trayView = TrayView(tray, config);
+            ((INotifyCollectionChanged)trayView).CollectionChanged += (_, _) => UpdateTray();
+            TrayIcons.ItemsSource = shownIcons;
+            UpdateTray();
+        }
 
         foregroundHook = (_, _, h, idObject, _, _, _) => { if (idObject == 0) OnForeground(h); };
         SetWinEventHook(3, 3, IntPtr.Zero, foregroundHook, 0, 0, 0); // EVENT_SYSTEM_FOREGROUND, out of context
@@ -383,15 +394,69 @@ public partial class MenuBarWindow : Window
         });
     }
 
-    /// <summary>Visible tray icons, app icons first and the pinned system icons (network, volume) next to the clock.</summary>
-    static ListCollectionView TrayView(NotificationArea tray)
+    /// <summary>Tray icons the menu bar can show; the power icon is left out because the menu bar draws its own battery, and UsageBar's because it shows its usage as items.</summary>
+    internal static bool Listed(NotifyIcon icon) =>
+        !icon.IsHidden && icon.GUID != new Guid(NotificationArea.POWER_GUID)
+        && !string.Equals(Path.GetFileName(icon.Path), "UsageBar.exe", StringComparison.OrdinalIgnoreCase);
+
+    internal static string IconName(NotifyIcon icon) =>
+        string.IsNullOrEmpty(icon.Title) ? Path.GetFileNameWithoutExtension(icon.Path) : icon.Title;
+
+    /// <summary>Called after the settings change which tray icons are shown.</summary>
+    public void ApplyTray() => trayView?.Refresh(); // raises CollectionChanged, which updates the bar
+
+    /// <summary>The leftmost icons beyond the maximum move to the overflow menu; the pinned ones next to the clock stay.</summary>
+    void UpdateTray()
     {
-        var power = new Guid(NotificationArea.POWER_GUID); // the menu bar draws its own battery
+        var all = trayView!.Cast<NotifyIcon>().ToList();
+        var overflow = config.MaxTrayIcons > 0 ? Math.Max(all.Count - config.MaxTrayIcons, 0) : 0;
+        overflowIcons = all.Take(overflow).ToList();
+        var shown = all.Skip(overflow).ToList();
+        // Edit in place rather than rebuild: a Ctrl+drag re-sorts on every move and needs the dragged icon's container to survive.
+        for (var i = shownIcons.Count - 1; i >= 0; i--)
+            if (!shown.Contains(shownIcons[i])) shownIcons.RemoveAt(i);
+        for (var i = 0; i < shown.Count; i++)
+        {
+            var at = shownIcons.IndexOf(shown[i]);
+            if (at < 0) shownIcons.Insert(i, shown[i]);
+            else if (at != i) shownIcons.Move(at, i);
+        }
+        TrayOverflow.Visibility = overflow > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // shortcut: an overflow item forwards only a left click; its context menu needs the icon in the bar, when it is worth wiring.
+    void TrayOverflow_Click(object sender, RoutedEventArgs e) =>
+        Menus.Show(TrayOverflow, PlacementMode.Bottom, overflowIcons.Select(icon =>
+        {
+            var item = Menus.Item(IconName(icon), () =>
+            {
+                icon.Placement = ScreenRect(TrayOverflow);
+                AllowSetForegroundWindow(uint.MaxValue);
+                var cursor = MouseHelper.GetCursorPositionParam();
+                icon.IconMouseDown(MouseButton.Left, cursor, GetDoubleClickTime());
+                icon.IconMouseUp(MouseButton.Left, cursor, GetDoubleClickTime());
+            });
+            // The menu template draws only Header, so the icon goes in it.
+            var image = new Image { Source = icon.Icon, Width = 16, Height = 16, Margin = new Thickness(0, 0, 8, 0) };
+            RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
+            item.Header = new StackPanel { Orientation = Orientation.Horizontal, Children = { image, new TextBlock { Text = IconName(icon) } } };
+            return item;
+        }));
+
+    /// <summary>The element's bounds in physical pixels, where apps place their flyouts (Shell_NotifyIconGetRect).</summary>
+    static NativeMethods.Rect ScreenRect(FrameworkElement element)
+    {
+        var topLeft = element.PointToScreen(new Point(0, 0));
+        var bottomRight = element.PointToScreen(new Point(element.ActualWidth, element.ActualHeight));
+        return new NativeMethods.Rect { Left = (int)topLeft.X, Top = (int)topLeft.Y, Right = (int)bottomRight.X, Bottom = (int)bottomRight.Y };
+    }
+
+    /// <summary>Shown tray icons, app icons first and the pinned system icons (network, volume) next to the clock.</summary>
+    static ListCollectionView TrayView(NotificationArea tray, Config config)
+    {
         var view = new ListCollectionView(tray.TrayIcons)
         {
-            // UsageBar's own icons too: the menu bar shows its usage as items.
-            Filter = o => o is NotifyIcon { IsHidden: false } icon && icon.GUID != power
-                && !string.Equals(Path.GetFileName(icon.Path), "UsageBar.exe", StringComparison.OrdinalIgnoreCase),
+            Filter = o => o is NotifyIcon icon && Listed(icon) && !config.HiddenTrayIcons.Any(icon.IsEqualByIdentifier),
             IsLiveFiltering = true,
             IsLiveSorting = true,
         };
@@ -437,13 +502,7 @@ public partial class MenuBarWindow : Window
         if (movingIcon != null) return;
         var element = (FrameworkElement)sender;
         if (TrayIcon(sender) is not { } icon) return;
-        // Apps place their flyouts next to this rect (Shell_NotifyIconGetRect); physical pixels.
-        var topLeft = element.PointToScreen(new Point(0, 0));
-        var bottomRight = element.PointToScreen(new Point(element.ActualWidth, element.ActualHeight));
-        icon.Placement = new NativeMethods.Rect
-        {
-            Left = (int)topLeft.X, Top = (int)topLeft.Y, Right = (int)bottomRight.X, Bottom = (int)bottomRight.Y,
-        };
+        icon.Placement = ScreenRect(element);
         // Version 4 icons draw their own tooltip; older ones expect the host to show the tip text.
         element.ToolTip = icon.Version >= 4 ? null : icon.Title;
         icon.IconMouseEnter(MouseHelper.GetCursorPositionParam());

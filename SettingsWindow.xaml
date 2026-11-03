@@ -277,6 +277,26 @@
             </StackPanel>
         </TabItem>
 
+        <TabItem Header="트레이 아이콘" Tag="&#xE8FD;">
+            <StackPanel>
+                <Border Style="{StaticResource Card}">
+                    <DockPanel Style="{StaticResource Row}">
+                        <TextBox x:Name="MaxTrayBox" DockPanel.Dock="Right" Width="44" MaxLength="2" VerticalAlignment="Center"
+                                 AutomationProperties.Name="메뉴 막대에 표시할 최대 개수"
+                                 KeyDown="MaxTrayBox_KeyDown" LostKeyboardFocus="MaxTrayBox_LostKeyboardFocus"/>
+                        <TextBlock VerticalAlignment="Center" TextWrapping="Wrap"
+                                   Text="메뉴 막대에 표시할 최대 개수 (0은 제한 없음, 넘치는 아이콘은 ⋯ 메뉴에 표시)"/>
+                    </DockPanel>
+                </Border>
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <StackPanel x:Name="TrayList"/>
+                        <TextBlock x:Name="TrayEmpty" Text="표시할 트레이 아이콘이 없습니다." Opacity="0.6" Margin="0,14"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </TabItem>
+
         <TabItem Header="핫 코너" Tag="&#xE740;">
             <Border Style="{StaticResource Card}">
                 <Grid Margin="0,14">
