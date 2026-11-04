@@ -128,7 +128,7 @@ public partial class SettingsWindow : Window
     {
         var button = (Button)sender;
         var corner = config.HotCorners[Array.IndexOf(CornerButtons, button)];
-        var menu = new ContextMenu { PlacementTarget = button, Placement = PlacementMode.Bottom };
+        var menu = new ContextMenu { PlacementTarget = button, Placement = PlacementMode.Bottom, HorizontalOffset = -Menus.ShadowMargin, VerticalOffset = -Menus.ShadowMargin };
         var items = new List<(MenuItem item, HotCornerAction action)>();
         foreach (var action in HotCorners.Menu)
         {
@@ -137,7 +137,7 @@ public partial class SettingsWindow : Window
                 menu.Items.Add(new Separator());
                 continue;
             }
-            var item = new MenuItem { IsChecked = a == corner.Action };
+            var item = new MenuItem { IsChecked = a == corner.Action, Padding = new Thickness(26, 0, 12, 0) }; // room for the check, as in Menus.Show
             item.Click += (_, _) =>
             {
                 corner.Action = a;

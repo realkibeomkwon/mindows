@@ -8,21 +8,23 @@
         <!-- Pretendard is close to the macOS system font; it is often not installed, so Windows' own UI font follows. -->
         <FontFamily x:Key="UiFont">Pretendard, Segoe UI Variable Text, Segoe UI</FontFamily>
 
+        <!-- Geometry traced from macOS menu captures at 2x, in pt as DIPs: 24 high rows, 6 inset around the rows,
+             11 high separators, text 10 inside the highlight, a 14 corner radius and a wide, soft shadow (28 of transparent margin holds it). -->
         <Style TargetType="ContextMenu">
             <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Foreground" Value="{DynamicResource MenuFg}"/>
-            <Setter Property="MinWidth" Value="220"/>
+            <Setter Property="MinWidth" Value="256"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ContextMenu">
-                        <Grid Margin="8">
-                            <Border CornerRadius="9" Background="{DynamicResource MenuBg}">
+                        <Grid Margin="28">
+                            <Border CornerRadius="14" Background="{DynamicResource MenuBg}">
                                 <Border.Effect>
-                                    <DropShadowEffect BlurRadius="14" ShadowDepth="3" Opacity="0.3"/>
+                                    <DropShadowEffect BlurRadius="28" ShadowDepth="8" Direction="270" Opacity="0.28"/>
                                 </Border.Effect>
                             </Border>
-                            <Border CornerRadius="9" BorderThickness="1" BorderBrush="{DynamicResource MenuBorder}" Padding="5">
+                            <Border CornerRadius="14" BorderThickness="1" BorderBrush="{DynamicResource MenuBorder}" Padding="6">
                                 <StackPanel IsItemsHost="True"/>
                             </Border>
                         </Grid>
@@ -32,24 +34,33 @@
         </Style>
 
         <Style TargetType="MenuItem">
+            <Setter Property="Padding" Value="10,0,12,0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="MenuItem">
-                        <Border x:Name="Bd" Background="Transparent" CornerRadius="5" Padding="4,4,12,4">
-                            <Grid>
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="8" Padding="{TemplateBinding Padding}" MinHeight="24">
+                            <Grid VerticalAlignment="Center">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="18"/>
                                     <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock x:Name="Check" Text="✓" Visibility="Hidden" HorizontalAlignment="Center"/>
-                                <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="False"/>
+                                <!-- The check sits in the left padding that Menus.Show widens when any item can be checked. -->
+                                <TextBlock x:Name="Check" Text="✓" FontFamily="Segoe UI Symbol" FontWeight="SemiBold" Visibility="Hidden"
+                                           HorizontalAlignment="Left" Margin="-16,0,0,0"/>
+                                <ContentPresenter ContentSource="Header" RecognizesAccessKey="False"/>
+                                <!-- Shortcut hints sit in a right-aligned, dimmed column, as on macOS. -->
+                                <TextBlock Grid.Column="1" Text="{TemplateBinding InputGestureText}" Margin="28,0,0,0" Opacity="0.5"/>
                             </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsHighlighted" Value="True">
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsHighlighted" Value="True"/>
+                                    <Condition Property="IsEnabled" Value="True"/>
+                                </MultiTrigger.Conditions>
                                 <Setter TargetName="Bd" Property="Background" Value="{StaticResource Accent}"/>
                                 <Setter Property="Foreground" Value="White"/>
-                            </Trigger>
+                            </MultiTrigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="Check" Property="Visibility" Value="Visible"/>
                             </Trigger>
@@ -62,12 +73,12 @@
             </Setter>
         </Style>
 
-        <!-- Separators inside menus use this key, not the implicit Separator style. -->
+        <!-- Separators inside menus use this key, not the implicit Separator style: 11 high with a 1 px line. -->
         <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator">
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Separator">
-                        <Border Height="1" Margin="10,5" Background="{DynamicResource MenuBorder}"/>
+                        <Border Height="1" Margin="4,5" Background="{DynamicResource MenuBorder}"/>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>

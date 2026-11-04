@@ -77,9 +77,12 @@ static class Sys
 
 static class Menus
 {
-    public static MenuItem Item(string header, Action onClick, bool enabled = true, bool isChecked = false)
+    public const double ShadowMargin = 28; // keep equal to the ContextMenu template's outer margin in App.xaml
+
+    public static MenuItem Item(string header, Action onClick, bool enabled = true, bool? isChecked = null, string? shortcut = null)
     {
-        var item = new MenuItem { Header = header, IsEnabled = enabled, IsChecked = isChecked };
+        // Tag marks items that have a check state, so Show can reserve the check column for the whole menu.
+        var item = new MenuItem { Header = header, IsEnabled = enabled, IsChecked = isChecked == true, InputGestureText = shortcut, Tag = isChecked == null ? null : "check" };
         item.Click += (_, _) => onClick();
         return item;
     }
@@ -87,8 +90,14 @@ static class Menus
     /// <summary>Opens a menu at <paramref name="target"/>; null entries become separators.</summary>
     public static void Show(UIElement target, PlacementMode placement, IEnumerable<Control?> items)
     {
-        var menu = new ContextMenu { PlacementTarget = target, Placement = placement };
+        // The template keeps ShadowMargin of transparent space around the menu for its shadow; offset it away so the visible edge meets the target.
+        var menu = new ContextMenu { PlacementTarget = target, Placement = placement, HorizontalOffset = -ShadowMargin };
+        menu.VerticalOffset = placement == PlacementMode.Top ? ShadowMargin : -ShadowMargin;
         foreach (var item in items) menu.Items.Add(item ?? new Separator());
+        // macOS aligns every title right of a shared state column when any item can be checked.
+        var entries = menu.Items.OfType<MenuItem>().ToList();
+        if (entries.Any(i => i.Tag is "check"))
+            entries.ForEach(i => i.Padding = new Thickness(26, 0, 12, 0));
 
         menu.IsOpen = true;
         WatchForDismiss(menu);
