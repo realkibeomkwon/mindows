@@ -494,7 +494,27 @@ public partial class MenuBarWindow : Window
     {
         AllowSetForegroundWindow(uint.MaxValue);
         TrayIcon(sender)?.IconMouseUp(e.ChangedButton, MouseHelper.GetCursorPositionParam(), GetDoubleClickTime());
+        MoveMenuBelowBar();
         e.Handled = true;
+    }
+
+    /// <summary>Apps open their tray menu at the click, inside the bar, which is drawn over it; shift the menu to start under the bar.</summary>
+    void MoveMenuBelowBar()
+    {
+        var bottom = ScreenRect(this).Bottom;
+        var tries = 0;
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(10) };
+        timer.Tick += (_, _) =>
+        {
+            var menu = FindWindow("#32768", null);
+            if (menu != IntPtr.Zero && IsWindowVisible(menu) && GetWindowRect(menu, out var r))
+            {
+                if (r.Top < bottom) SetWindowPos(menu, IntPtr.Zero, r.Left, bottom, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                timer.Stop();
+            }
+            else if (++tries >= 50) timer.Stop(); // the app shows no menu: this click was not a menu click
+        };
+        timer.Start();
     }
 
     void Tray_MouseEnter(object sender, MouseEventArgs e)
