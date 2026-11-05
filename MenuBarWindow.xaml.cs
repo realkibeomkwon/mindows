@@ -63,6 +63,9 @@ public partial class MenuBarWindow : Window
         (this.tray, this.config, this.dock, this.openSettings) = (tray, config, dock, openSettings);
         InitializeComponent();
         _ = new AppBar(this, AppBar.Top, () => BarHeight, () => BarHeight);
+        UpdateForeground();
+        // A wallpaper change (a slideshow too) is announced as a desktop preference change.
+        Microsoft.Win32.SystemEvents.UserPreferenceChanged += (_, _) => Dispatcher.BeginInvoke(UpdateForeground);
         if (tray != null)
         {
             trayView = TrayView(tray, config);
@@ -380,13 +383,13 @@ public partial class MenuBarWindow : Window
             Menus.Item("이 PC에 관하여", () => Sys.Launch("ms-settings:about")),
             null,
             Menus.Item("시스템 설정...", () => Sys.Launch("ms-settings:")),
-            Menus.Item("작업 관리자", () => Sys.Launch("taskmgr.exe"), shortcut: "⌃⇧⎋"),
+            Menus.Item("작업 관리자", () => Sys.Launch("taskmgr.exe"), shortcut: "Ctrl+Shift+Esc"),
             null,
             Menus.Item("잠자기", () => SetSuspendState(false, false, false)),
             Menus.Item("재시동...", () => { if (Sys.Confirm("지금 재시동하시겠습니까?")) Sys.Run("shutdown", "/r /t 0"); }),
             Menus.Item("시스템 종료...", () => { if (Sys.Confirm("지금 시스템을 종료하시겠습니까?")) Sys.Run("shutdown", "/s /t 0"); }),
             null,
-            Menus.Item("화면 잠금", () => LockWorkStation(), shortcut: "⊞L"),
+            Menus.Item("화면 잠금", () => LockWorkStation(), shortcut: "Win+L"),
             Menus.Item("로그아웃...", () => { if (Sys.Confirm("로그아웃하시겠습니까?")) ExitWindowsEx(0, 0); }),
             null,
             Menus.Item("Mindows 설정...", openSettings),
@@ -399,8 +402,32 @@ public partial class MenuBarWindow : Window
         !icon.IsHidden && icon.GUID != new Guid(NotificationArea.POWER_GUID)
         && !string.Equals(Path.GetFileName(icon.Path), "UsageBar.exe", StringComparison.OrdinalIgnoreCase);
 
+    // The volume icon's title is a tooltip that changes with the output device and level, so it gets a fixed name.
     internal static string IconName(NotifyIcon icon) =>
-        string.IsNullOrEmpty(icon.Title) ? Path.GetFileNameWithoutExtension(icon.Path) : icon.Title;
+        icon.GUID == new Guid(NotificationArea.VOLUME_GUID) ? "Volume"
+        : string.IsNullOrEmpty(icon.Title) ? Path.GetFileNameWithoutExtension(icon.Path) : icon.Title;
+
+    /// <summary>
+    /// A transparent bar shows the wallpaper through it, so its text turns white over a dark strip and black over a light one,
+    /// whatever the theme; a solid bar keeps the theme's text color.
+    /// shortcut: samples the top strip of the wallpaper file as if it were stretched to the screen, so fit/center/tile modes can misjudge; use the real placement if that shows.
+    /// </summary>
+    public void UpdateForeground()
+    {
+        if (!config.MenuBarTransparent || SettingsWindow.Wallpaper() is not { } image)
+        {
+            Resources.Remove("BarFg"); // a solid color or a missing file has no strip to measure
+            return;
+        }
+        var rows = Math.Max(1, (int)Math.Round(image.PixelHeight * BarHeight / SystemParameters.PrimaryScreenHeight));
+        var pixels = new System.Windows.Media.Imaging.FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
+        var bgra = new byte[pixels.PixelWidth * 4 * rows];
+        pixels.CopyPixels(new Int32Rect(0, 0, pixels.PixelWidth, rows), bgra, pixels.PixelWidth * 4, 0);
+        double sum = 0;
+        for (var i = 0; i < bgra.Length; i += 4) sum += 0.0722 * bgra[i] + 0.7152 * bgra[i + 1] + 0.2126 * bgra[i + 2];
+        var brush = sum / (bgra.Length / 4) < 128 ? Brushes.White : Brushes.Black;
+        Resources["BarFg"] = brush;
+    }
 
     /// <summary>Called after the settings change which tray icons are shown.</summary>
     public void ApplyTray() => trayView?.Refresh(); // raises CollectionChanged, which updates the bar
@@ -609,4 +636,38 @@ public partial class MenuBarWindow : Window
     void Battery_Click(object sender, RoutedEventArgs e) => Sys.Launch("ms-settings:batterysaver");
     void Control_Click(object sender, RoutedEventArgs e) => Sys.WinKey('A');
     void Clock_Click(object sender, RoutedEventArgs e) => Sys.WinKey('N');
+}
+
+/// <summary>
+/// Dark single-color tray icons (Tailscale's, drawn for a light taskbar) vanish on a dark bar; while the bar's text is light,
+/// they are shown inverted. Colored icons pass through untouched.
+/// </summary>
+public class TrayIconTint : System.Windows.Data.IMultiValueConverter
+{
+    public object? Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (values[0] is not System.Windows.Media.Imaging.BitmapSource source) return values[0];
+        if (values[1] is not SolidColorBrush { Color: var fg } || fg.R + fg.G + fg.B < 3 * 128) return source;
+        var pixels = new System.Windows.Media.Imaging.FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+        var stride = pixels.PixelWidth * 4;
+        var bgra = new byte[stride * pixels.PixelHeight];
+        pixels.CopyPixels(bgra, stride, 0);
+        double sum = 0;
+        var count = 0;
+        for (var i = 0; i < bgra.Length; i += 4)
+        {
+            if (bgra[i + 3] < 128) continue;
+            if (Math.Max(bgra[i], Math.Max(bgra[i + 1], bgra[i + 2])) - Math.Min(bgra[i], Math.Min(bgra[i + 1], bgra[i + 2])) > 40) return source;
+            sum += (bgra[i] + bgra[i + 1] + bgra[i + 2]) / 3.0;
+            count++;
+        }
+        if (count == 0 || sum / count >= 100) return source;
+        for (var i = 0; i < bgra.Length; i += 4)
+            (bgra[i], bgra[i + 1], bgra[i + 2]) = ((byte)(255 - bgra[i]), (byte)(255 - bgra[i + 1]), (byte)(255 - bgra[i + 2]));
+        var inverted = System.Windows.Media.Imaging.BitmapSource.Create(pixels.PixelWidth, pixels.PixelHeight, source.DpiX, source.DpiY, PixelFormats.Bgra32, null, bgra, stride);
+        inverted.Freeze();
+        return inverted;
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) => throw new NotSupportedException();
 }

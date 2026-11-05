@@ -46,7 +46,41 @@ public partial class SettingsWindow : Window
         {
             var dark = App.LightTheme ? 0 : 1;
             DwmSetWindowAttribute(new WindowInteropHelper(this).Handle, 20, ref dark, sizeof(int)); // DWMWA_USE_IMMERSIVE_DARK_MODE
+            ApplyBackdrop();
         };
+        // Windows broadcasts a setting change when its transparency effects are switched.
+        UserPreferenceChangedEventHandler onPrefs = (_, _) => Dispatcher.BeginInvoke(() => { Sync(); ApplyBackdrop(); });
+        SystemEvents.UserPreferenceChanged += onPrefs;
+        Closed += (_, _) => SystemEvents.UserPreferenceChanged -= onPrefs;
+    }
+
+    // Absent means on, as in Windows itself.
+    static bool WindowsTransparency() =>
+        Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency", 1) is not 0;
+
+    /// <summary>Acrylic behind a see-through sidebar while Windows' transparency effects are on; otherwise the opaque look.</summary>
+    void ApplyBackdrop()
+    {
+        var on = WindowsTransparency();
+        var handle = new WindowInteropHelper(this).Handle;
+        if (HwndSource.FromHwnd(handle)?.CompositionTarget is { } target)
+            target.BackgroundColor = on ? System.Windows.Media.Colors.Transparent : System.Windows.SystemColors.WindowColor;
+        var margins = new Margins { Left = on ? -1 : 0, Right = on ? -1 : 0, Top = on ? -1 : 0, Bottom = on ? -1 : 0 };
+        DwmExtendFrameIntoClientArea(handle, ref margins);
+        var backdrop = on ? 3 : 1; // DWMWA_SYSTEMBACKDROP_TYPE: acrylic / none
+        DwmSetWindowAttribute(handle, 38, ref backdrop, sizeof(int));
+        if (on)
+        {
+            Background = System.Windows.Media.Brushes.Transparent;
+            var tint = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(App.LightTheme ? "#66F1EFEE" : "#66202020"));
+            tint.Freeze();
+            Resources["PaneBg"] = tint;
+        }
+        else
+        {
+            SetResourceReference(BackgroundProperty, "WindowBg");
+            Resources.Remove("PaneBg");
+        }
     }
 
     void Sync()
@@ -59,6 +93,8 @@ public partial class SettingsWindow : Window
         Magnification.IsChecked = config.DockMagnification;
         AutoHide.IsChecked = config.DockAutoHide;
         AutoHideAnimation.IsChecked = config.DockAutoHideAnimation;
+        MenuBarTransparent.IsChecked = config.MenuBarTransparent;
+        Translucency.IsChecked = WindowsTransparency(); // the setting is Windows' own, so the switch mirrors it
         for (var i = 0; i < 4; i++) CornerButtons[i].Content = HotCorners.Describe(config.HotCorners[i].Action, config.HotCorners[i].Modifiers);
         WallpaperPreview.Source = Wallpaper();
         MaxTrayBox.Text = $"{config.MaxTrayIcons}";
@@ -168,7 +204,7 @@ public partial class SettingsWindow : Window
     }
 
     /// <summary>The desktop picture as Windows last drew it; null for a solid color or a missing file.</summary>
-    static BitmapImage? Wallpaper()
+    internal static BitmapImage? Wallpaper()
     {
         try
         {
@@ -257,6 +293,25 @@ public partial class SettingsWindow : Window
     }
 
     void IconSizeBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) => CommitIconSizeBox();
+    // Windows' transparency effects are system-wide; this switch writes the same setting the Settings app does.
+    void Translucency_Click(object sender, RoutedEventArgs e)
+    {
+        using (var key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
+            key.SetValue("EnableTransparency", Translucency.IsChecked == true ? 1 : 0, RegistryValueKind.DWord);
+        var area = System.Runtime.InteropServices.Marshal.StringToHGlobalUni("ImmersiveColorSet");
+        try { SendMessageTimeout((IntPtr)0xFFFF, 0x1A /* WM_SETTINGCHANGE */, IntPtr.Zero, area, 2 /* SMTO_ABORTIFHUNG */, 1000, out _); }
+        finally { System.Runtime.InteropServices.Marshal.FreeHGlobal(area); }
+        ApplyBackdrop();
+    }
+
+    void MenuBarTransparent_Click(object sender, RoutedEventArgs e)
+    {
+        config.MenuBarTransparent = MenuBarTransparent.IsChecked == true;
+        config.Save();
+        App.ApplyBarBackground(config.MenuBarTransparent);
+        bar.UpdateForeground();
+    }
+
     void Magnification_Click(object sender, RoutedEventArgs e) => dock.SetMagnification(Magnification.IsChecked == true);
     void AutoHide_Click(object sender, RoutedEventArgs e) => dock.SetAutoHide(AutoHide.IsChecked == true);
 

@@ -1,12 +1,14 @@
 <Window x:Class="Mindows.MenuBarWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Mindows"
         Title="Mindows Menu Bar" WindowStyle="None" AllowsTransparency="True" ResizeMode="NoResize"
         ShowInTaskbar="False" Topmost="True" ShowActivated="False"
         Left="-20000" Top="-20000" Width="10" Height="10"
         Background="{DynamicResource BarBg}" Foreground="{DynamicResource BarFg}"
         FontFamily="{StaticResource UiFont}" FontSize="13">
     <Window.Resources>
+        <local:TrayIconTint x:Key="TrayIconTint"/>
         <Style x:Key="BarButton" TargetType="Button">
             <Setter Property="Focusable" Value="False"/>
             <Setter Property="Foreground" Value="{DynamicResource BarFg}"/>
@@ -104,8 +106,15 @@
                                 </Style>
                             </Border.Style>
                             <Grid VerticalAlignment="Center">
-                                <Image x:Name="Icon" Source="{Binding Icon}" Width="16" Height="16"
-                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                <Image x:Name="Icon" Width="16" Height="16" RenderOptions.BitmapScalingMode="HighQuality">
+                                    <Image.Source>
+                                        <!-- The window's Foreground follows BarFg, so the icon is re-tinted when the bar's text color flips. -->
+                                        <MultiBinding Converter="{StaticResource TrayIconTint}">
+                                            <Binding Path="Icon"/>
+                                            <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                        </MultiBinding>
+                                    </Image.Source>
+                                </Image>
                                 <!-- macOS speaker.wave.3.fill in place of Windows' volume icon; clicks still reach it.
                                      The macOS icons here are traced over menu bar captures, in pt as DIPs.
                                      As with Wi-Fi, the waves beyond the volume are dimmed; the percentage follows, as with the battery. -->

@@ -31,6 +31,8 @@ public class Config
     /// <summary>Dock icon size at rest, in DIPs.</summary>
     public double DockIconSize { get; set; } = 48;
     public bool DockMagnification { get; set; } = true;
+    /// <summary>Menu bar with no background at all; off, it is solid white or dark gray.</summary>
+    public bool MenuBarTransparent { get; set; } = true;
     public bool DockAutoHide { get; set; }
     /// <summary>Slide the auto-hiding dock out and in; off, it disappears and appears at once.</summary>
     public bool DockAutoHideAnimation { get; set; } = true;

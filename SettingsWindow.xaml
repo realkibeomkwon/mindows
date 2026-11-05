@@ -13,11 +13,11 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
-                        <Border x:Name="Bd" Background="Transparent" CornerRadius="6" Padding="6,5" Margin="0,1">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="10" Padding="8,6" Margin="0,1">
                             <StackPanel Orientation="Horizontal">
-                                <Border Width="22" Height="22" CornerRadius="5" Background="#636366" Margin="0,0,8,0">
+                                <Border Width="26" Height="26" CornerRadius="7" Background="#636366" Margin="0,0,10,0">
                                     <TextBlock Text="{TemplateBinding Tag}" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                               FontSize="13" Foreground="White"
+                                               FontSize="14" Foreground="White"
                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <ContentPresenter x:Name="Hdr" ContentSource="Header" VerticalAlignment="Center"/>
@@ -30,6 +30,7 @@
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{StaticResource Accent}"/>
                                 <Setter TargetName="Hdr" Property="TextElement.Foreground" Value="White"/>
+                                <Setter TargetName="Hdr" Property="TextElement.FontWeight" Value="SemiBold"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -40,14 +41,12 @@
         <!-- A group of rows, as on macOS. -->
         <Style x:Key="Card" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource CardBg}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource MenuBorder}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="9"/>
-            <Setter Property="Padding" Value="14,0"/>
-            <Setter Property="Margin" Value="0,0,0,16"/>
+            <Setter Property="CornerRadius" Value="14"/>
+            <Setter Property="Padding" Value="18,0"/>
+            <Setter Property="Margin" Value="0,0,0,20"/>
         </Style>
         <Style x:Key="Row" TargetType="DockPanel">
-            <Setter Property="MinHeight" Value="44"/>
+            <Setter Property="MinHeight" Value="46"/>
             <Style.Triggers>
                 <Trigger Property="IsEnabled" Value="False">
                     <Setter Property="Opacity" Value="0.4"/>
@@ -64,8 +63,8 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="CheckBox">
-                        <Border x:Name="Track" Width="36" Height="20" CornerRadius="10" Background="{DynamicResource MenuBorder}">
-                            <Ellipse x:Name="Knob" Width="16" Height="16" Margin="2,0" Fill="White" HorizontalAlignment="Left">
+                        <Border x:Name="Track" Width="38" Height="22" CornerRadius="11" Background="{DynamicResource MenuBorder}">
+                            <Ellipse x:Name="Knob" Width="18" Height="18" Margin="2,0" Fill="White" HorizontalAlignment="Left">
                                 <Ellipse.Effect>
                                     <DropShadowEffect BlurRadius="3" ShadowDepth="1" Opacity="0.3"/>
                                 </Ellipse.Effect>
@@ -196,16 +195,16 @@
             <ControlTemplate TargetType="TabControl">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="200"/>
+                        <ColumnDefinition Width="220"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <Border Background="{DynamicResource PaneBg}" BorderBrush="{DynamicResource MenuBorder}" BorderThickness="0,0,1,0">
-                        <StackPanel IsItemsHost="True" Margin="10,12" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                    <Border Background="{DynamicResource PaneBg}">
+                        <StackPanel IsItemsHost="True" Margin="12,16" KeyboardNavigation.DirectionalNavigation="Cycle"/>
                     </Border>
-                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Margin="24,16,24,8">
+                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Background="{DynamicResource WindowBg}">
+                        <StackPanel Margin="24,20,24,8">
                             <TextBlock Text="{Binding SelectedItem.Header, RelativeSource={RelativeSource TemplatedParent}}"
-                                       FontSize="20" FontWeight="SemiBold" Margin="0,0,0,16"/>
+                                       FontSize="17" FontWeight="SemiBold" Margin="2,0,0,18"/>
                             <ContentPresenter ContentSource="SelectedContent"/>
                         </StackPanel>
                     </ScrollViewer>
@@ -215,11 +214,25 @@
 
         <TabItem Header="일반" Tag="&#xE713;">
             <Border Style="{StaticResource Card}">
-                <DockPanel Style="{StaticResource Row}">
-                    <CheckBox x:Name="LaunchAtLogin" DockPanel.Dock="Right" Style="{StaticResource Switch}"
-                              AutomationProperties.Name="로그인 시 자동 실행" Click="LaunchAtLogin_Click"/>
-                    <TextBlock Text="로그인 시 자동 실행" VerticalAlignment="Center"/>
-                </DockPanel>
+                <StackPanel>
+                    <DockPanel Style="{StaticResource Row}">
+                        <CheckBox x:Name="LaunchAtLogin" DockPanel.Dock="Right" Style="{StaticResource Switch}"
+                                  AutomationProperties.Name="로그인 시 자동 실행" Click="LaunchAtLogin_Click"/>
+                        <TextBlock Text="로그인 시 자동 실행" VerticalAlignment="Center"/>
+                    </DockPanel>
+                    <Border Style="{StaticResource RowLine}"/>
+                    <DockPanel Style="{StaticResource Row}">
+                        <CheckBox x:Name="Translucency" DockPanel.Dock="Right" Style="{StaticResource Switch}"
+                                  AutomationProperties.Name="창 투명 효과" Click="Translucency_Click"/>
+                        <TextBlock Text="창 투명 효과" VerticalAlignment="Center"/>
+                    </DockPanel>
+                    <Border Style="{StaticResource RowLine}"/>
+                    <DockPanel Style="{StaticResource Row}">
+                        <CheckBox x:Name="MenuBarTransparent" DockPanel.Dock="Right" Style="{StaticResource Switch}"
+                                  AutomationProperties.Name="메뉴 막대 투명" Click="MenuBarTransparent_Click"/>
+                        <TextBlock Text="메뉴 막대 투명" VerticalAlignment="Center"/>
+                    </DockPanel>
+                </StackPanel>
             </Border>
         </TabItem>
 
