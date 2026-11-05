@@ -457,6 +457,14 @@ public partial class MenuBarWindow : Window
         {
             var item = Menus.Item(IconName(icon), () =>
             {
+                // Ctrl+click brings the icon into the bar; the leftmost shown one takes its place in the overflow.
+                if (CtrlDown)
+                {
+                    MoveTrayIcon(icon, shownIcons.Skip(1).FirstOrDefault());
+                    config.TrayOrder = tray!.PinnedNotifyIcons;
+                    config.Save();
+                    return;
+                }
                 icon.Placement = ScreenRect(TrayOverflow);
                 AllowSetForegroundWindow(uint.MaxValue);
                 var cursor = MouseHelper.GetCursorPositionParam();
@@ -570,15 +578,27 @@ public partial class MenuBarWindow : Window
         var next = icons.FirstOrDefault(i => i != moving && TrayIcons.ItemContainerGenerator.ContainerFromItem(i) is FrameworkElement c
             && c.TranslatePoint(new Point(c.ActualWidth / 2, 0), TrayIcons).X > x);
         if (next == icons.ElementAtOrDefault(icons.IndexOf(moving) + 1)) return;
+        MoveTrayIcon(moving, next);
+    }
+
+    /// <summary>Moves the icon before next, or to the end, in the whole tray order (the overflow icons are its leftmost).</summary>
+    void MoveTrayIcon(NotifyIcon icon, NotifyIcon? next)
+    {
         // Unpinned icons are shown left of the pinned ones. A saved identifier can hold an old title, so take the icon's current one.
-        var order = icons.Where(i => !i.IsPinned).Select(i => i.Identifier)
-            .Concat(tray!.PinnedNotifyIcons.Select(p => icons.FirstOrDefault(i => i.IsEqualByIdentifier(p))?.Identifier ?? p));
-        tray.SetPinnedIcons(MoveBefore(order, moving.Identifier, next?.Identifier));
+        var all = trayView!.Cast<NotifyIcon>().ToList();
+        var order = all.Where(i => !i.IsPinned).Select(i => i.Identifier)
+            .Concat(tray!.PinnedNotifyIcons.Select(p => all.FirstOrDefault(i => i.IsEqualByIdentifier(p))?.Identifier ?? p));
+        var result = MoveBefore(order, icon.Identifier, next?.Identifier);
+        tray.SetPinnedIcons(result);
     }
 
     void TrayIcons_MouseUp(object sender, MouseButtonEventArgs e)
     {
-        if (movingIcon != null) TrayIcons.ReleaseMouseCapture(); // ends the move in LostMouseCapture
+        if (movingIcon is not { } moving) return;
+        // Dropped on the overflow button: to the front of the order, where the overflow icons are.
+        if (TrayOverflow.IsVisible && new Rect(TrayOverflow.RenderSize).Contains(e.GetPosition(TrayOverflow)))
+            MoveTrayIcon(moving, trayView!.Cast<NotifyIcon>().FirstOrDefault(i => i != moving));
+        TrayIcons.ReleaseMouseCapture(); // ends the move in LostMouseCapture
     }
 
     void TrayIcons_LostMouseCapture(object sender, MouseEventArgs e)
