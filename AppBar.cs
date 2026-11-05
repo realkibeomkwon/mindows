@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using Microsoft.Win32;
 using static Mindows.Native;
 
 namespace Mindows;
@@ -17,6 +18,8 @@ sealed class AppBar
     static readonly List<AppBar> all = new();
     // Explorer keeps reporting full screen while the foreground moves between windows it counts as full screen.
     static readonly WinEventProc foregroundHook = (_, _, _, idObject, _, _, _) => { if (idObject == 0) foreach (var bar in all) bar.UpdateVisibility(); };
+    // uiAccess windows sit in a z-order band above the lock screen, so the bars must hide themselves while it is up.
+    static bool locked;
 
     readonly Window window;
     readonly uint edge;
@@ -30,6 +33,15 @@ sealed class AppBar
         (this.window, this.edge, this.reserve, this.height) = (window, edge, reserve, height);
         if (all.Count == 0) SetWinEventHook(3, 3, IntPtr.Zero, foregroundHook, 0, 0, 0); // EVENT_SYSTEM_FOREGROUND, out of context
         all.Add(this);
+        SystemEvents.SessionSwitch += (_, e) =>
+        {
+            if (e.Reason is SessionSwitchReason.SessionLock or SessionSwitchReason.SessionUnlock)
+                window.Dispatcher.BeginInvoke(() =>
+                {
+                    locked = e.Reason == SessionSwitchReason.SessionLock;
+                    UpdateVisibility();
+                });
+        };
         window.SourceInitialized += (_, _) =>
         {
             hwnd = new WindowInteropHelper(window).Handle;
@@ -113,8 +125,11 @@ sealed class AppBar
         return IntPtr.Zero;
     }
 
-    void UpdateVisibility() =>
-        window.Visibility = fullScreenReported && IsFullScreen(GetForegroundWindow()) ? Visibility.Hidden : Visibility.Visible;
+    void UpdateVisibility()
+    {
+        if (hwnd == IntPtr.Zero) return;
+        window.Visibility = locked || fullScreenReported && IsFullScreen(GetForegroundWindow()) ? Visibility.Hidden : Visibility.Visible;
+    }
 
     // Explorer also reports a full-screen app once the last window closes and whatever is left takes the foreground:
     // the desktop, the lock screen's screen-sized window that stays visible behind it, or a background app's zero-size window.

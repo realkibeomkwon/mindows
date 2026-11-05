@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -33,6 +35,9 @@ public partial class MenuBarWindow : Window
     readonly DockWindow dock;
     readonly NotificationArea? tray;
     NotifyIcon? movingIcon; // tray icon being Ctrl+dragged to a new spot
+    readonly ObservableCollection<NotifyIcon> shownIcons = new(); // the tray icons in the bar
+    List<NotifyIcon> overflowIcons = new(); // the ones beyond Config.MaxTrayIcons, in the overflow menu
+    ListCollectionView? trayView;
 
     // Quick Settings and Search open over Explorer's hidden taskbar at the bottom; while one is open, keep Quick Settings
     // under the menu bar and Search, opened from the dock, just above the dock.
@@ -58,7 +63,16 @@ public partial class MenuBarWindow : Window
         (this.tray, this.config, this.dock, this.openSettings) = (tray, config, dock, openSettings);
         InitializeComponent();
         _ = new AppBar(this, AppBar.Top, () => BarHeight, () => BarHeight);
-        if (tray != null) TrayIcons.ItemsSource = TrayView(tray);
+        UpdateForeground();
+        // A wallpaper change (a slideshow too) is announced as a desktop preference change.
+        Microsoft.Win32.SystemEvents.UserPreferenceChanged += (_, _) => Dispatcher.BeginInvoke(UpdateForeground);
+        if (tray != null)
+        {
+            trayView = TrayView(tray, config);
+            ((INotifyCollectionChanged)trayView).CollectionChanged += (_, _) => UpdateTray();
+            TrayIcons.ItemsSource = shownIcons;
+            UpdateTray();
+        }
 
         foregroundHook = (_, _, h, idObject, _, _, _) => { if (idObject == 0) OnForeground(h); };
         SetWinEventHook(3, 3, IntPtr.Zero, foregroundHook, 0, 0, 0); // EVENT_SYSTEM_FOREGROUND, out of context
@@ -165,7 +179,7 @@ public partial class MenuBarWindow : Window
     // Over the volume icon, each wheel notch moves the volume 2%.
     void Tray_MouseWheel(object sender, MouseWheelEventArgs e)
     {
-        if (TrayIcon(sender).GUID != new Guid(NotificationArea.VOLUME_GUID)) return;
+        if (TrayIcon(sender)?.GUID != new Guid(NotificationArea.VOLUME_GUID)) return;
         wheelRest += e.Delta;
         StepVolume(wheelRest / 60);
         wheelRest %= 60;
@@ -369,13 +383,13 @@ public partial class MenuBarWindow : Window
             Menus.Item("이 PC에 관하여", () => Sys.Launch("ms-settings:about")),
             null,
             Menus.Item("시스템 설정...", () => Sys.Launch("ms-settings:")),
-            Menus.Item("작업 관리자", () => Sys.Launch("taskmgr.exe")),
+            Menus.Item("작업 관리자", () => Sys.Launch("taskmgr.exe"), shortcut: "Ctrl+Shift+Esc"),
             null,
             Menus.Item("잠자기", () => SetSuspendState(false, false, false)),
             Menus.Item("재시동...", () => { if (Sys.Confirm("지금 재시동하시겠습니까?")) Sys.Run("shutdown", "/r /t 0"); }),
             Menus.Item("시스템 종료...", () => { if (Sys.Confirm("지금 시스템을 종료하시겠습니까?")) Sys.Run("shutdown", "/s /t 0"); }),
             null,
-            Menus.Item("화면 잠금", () => LockWorkStation()),
+            Menus.Item("화면 잠금", () => LockWorkStation(), shortcut: "Win+L"),
             Menus.Item("로그아웃...", () => { if (Sys.Confirm("로그아웃하시겠습니까?")) ExitWindowsEx(0, 0); }),
             null,
             Menus.Item("Mindows 설정...", openSettings),
@@ -383,15 +397,101 @@ public partial class MenuBarWindow : Window
         });
     }
 
-    /// <summary>Visible tray icons, app icons first and the pinned system icons (network, volume) next to the clock.</summary>
-    static ListCollectionView TrayView(NotificationArea tray)
+    /// <summary>Tray icons the menu bar can show; the power icon is left out because the menu bar draws its own battery, and UsageBar's because it shows its usage as items.</summary>
+    internal static bool Listed(NotifyIcon icon) =>
+        !icon.IsHidden && icon.GUID != new Guid(NotificationArea.POWER_GUID)
+        && !string.Equals(Path.GetFileName(icon.Path), "UsageBar.exe", StringComparison.OrdinalIgnoreCase);
+
+    // The volume icon's title is a tooltip that changes with the output device and level, so it gets a fixed name.
+    internal static string IconName(NotifyIcon icon) =>
+        icon.GUID == new Guid(NotificationArea.VOLUME_GUID) ? "Volume"
+        : string.IsNullOrEmpty(icon.Title) ? Path.GetFileNameWithoutExtension(icon.Path) : icon.Title;
+
+    /// <summary>
+    /// A transparent bar shows the wallpaper through it, so its text turns white over a dark strip and black over a light one,
+    /// whatever the theme; a solid bar keeps the theme's text color.
+    /// shortcut: samples the top strip of the wallpaper file as if it were stretched to the screen, so fit/center/tile modes can misjudge; use the real placement if that shows.
+    /// </summary>
+    public void UpdateForeground()
     {
-        var power = new Guid(NotificationArea.POWER_GUID); // the menu bar draws its own battery
+        if (!config.MenuBarTransparent || SettingsWindow.Wallpaper() is not { } image)
+        {
+            Resources.Remove("BarFg"); // a solid color or a missing file has no strip to measure
+            return;
+        }
+        var rows = Math.Max(1, (int)Math.Round(image.PixelHeight * BarHeight / SystemParameters.PrimaryScreenHeight));
+        var pixels = new System.Windows.Media.Imaging.FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
+        var bgra = new byte[pixels.PixelWidth * 4 * rows];
+        pixels.CopyPixels(new Int32Rect(0, 0, pixels.PixelWidth, rows), bgra, pixels.PixelWidth * 4, 0);
+        double sum = 0;
+        for (var i = 0; i < bgra.Length; i += 4) sum += 0.0722 * bgra[i] + 0.7152 * bgra[i + 1] + 0.2126 * bgra[i + 2];
+        var brush = sum / (bgra.Length / 4) < 128 ? Brushes.White : Brushes.Black;
+        Resources["BarFg"] = brush;
+    }
+
+    /// <summary>Called after the settings change which tray icons are shown.</summary>
+    public void ApplyTray() => trayView?.Refresh(); // raises CollectionChanged, which updates the bar
+
+    /// <summary>The leftmost icons beyond the maximum move to the overflow menu; the pinned ones next to the clock stay.</summary>
+    void UpdateTray()
+    {
+        var all = trayView!.Cast<NotifyIcon>().ToList();
+        var overflow = config.MaxTrayIcons > 0 ? Math.Max(all.Count - config.MaxTrayIcons, 0) : 0;
+        overflowIcons = all.Take(overflow).ToList();
+        var shown = all.Skip(overflow).ToList();
+        // Edit in place rather than rebuild: a Ctrl+drag re-sorts on every move and needs the dragged icon's container to survive.
+        for (var i = shownIcons.Count - 1; i >= 0; i--)
+            if (!shown.Contains(shownIcons[i])) shownIcons.RemoveAt(i);
+        for (var i = 0; i < shown.Count; i++)
+        {
+            var at = shownIcons.IndexOf(shown[i]);
+            if (at < 0) shownIcons.Insert(i, shown[i]);
+            else if (at != i) shownIcons.Move(at, i);
+        }
+        TrayOverflow.Visibility = overflow > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // shortcut: an overflow item forwards only a left click; its context menu needs the icon in the bar, when it is worth wiring.
+    void TrayOverflow_Click(object sender, RoutedEventArgs e) =>
+        Menus.Show(TrayOverflow, PlacementMode.Bottom, overflowIcons.Select(icon =>
+        {
+            var item = Menus.Item(IconName(icon), () =>
+            {
+                // Ctrl+click brings the icon into the bar; the leftmost shown one takes its place in the overflow.
+                if (CtrlDown)
+                {
+                    MoveTrayIcon(icon, shownIcons.Skip(1).FirstOrDefault());
+                    config.TrayOrder = tray!.PinnedNotifyIcons;
+                    config.Save();
+                    return;
+                }
+                icon.Placement = ScreenRect(TrayOverflow);
+                AllowSetForegroundWindow(uint.MaxValue);
+                var cursor = MouseHelper.GetCursorPositionParam();
+                icon.IconMouseDown(MouseButton.Left, cursor, GetDoubleClickTime());
+                icon.IconMouseUp(MouseButton.Left, cursor, GetDoubleClickTime());
+            });
+            // The menu template draws only Header, so the icon goes in it.
+            var image = new Image { Source = icon.Icon, Width = 16, Height = 16, Margin = new Thickness(0, 0, 8, 0) };
+            RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
+            item.Header = new StackPanel { Orientation = Orientation.Horizontal, Children = { image, new TextBlock { Text = IconName(icon) } } };
+            return item;
+        }));
+
+    /// <summary>The element's bounds in physical pixels, where apps place their flyouts (Shell_NotifyIconGetRect).</summary>
+    static NativeMethods.Rect ScreenRect(FrameworkElement element)
+    {
+        var topLeft = element.PointToScreen(new Point(0, 0));
+        var bottomRight = element.PointToScreen(new Point(element.ActualWidth, element.ActualHeight));
+        return new NativeMethods.Rect { Left = (int)topLeft.X, Top = (int)topLeft.Y, Right = (int)bottomRight.X, Bottom = (int)bottomRight.Y };
+    }
+
+    /// <summary>Shown tray icons, app icons first and the pinned system icons (network, volume) next to the clock.</summary>
+    static ListCollectionView TrayView(NotificationArea tray, Config config)
+    {
         var view = new ListCollectionView(tray.TrayIcons)
         {
-            // UsageBar's own icons too: the menu bar shows its usage as items.
-            Filter = o => o is NotifyIcon { IsHidden: false } icon && icon.GUID != power
-                && !string.Equals(Path.GetFileName(icon.Path), "UsageBar.exe", StringComparison.OrdinalIgnoreCase),
+            Filter = o => o is NotifyIcon icon && Listed(icon) && !config.HiddenTrayIcons.Any(icon.IsEqualByIdentifier),
             IsLiveFiltering = true,
             IsLiveSorting = true,
         };
@@ -403,52 +503,70 @@ public partial class MenuBarWindow : Window
         return view;
     }
 
-    static NotifyIcon TrayIcon(object sender) => (NotifyIcon)((FrameworkElement)sender).DataContext;
+    // A container the live filter/sort removed keeps raising mouse events with DataContext {DisconnectedItem}.
+    static NotifyIcon? TrayIcon(object sender) => ((FrameworkElement)sender).DataContext as NotifyIcon;
 
     // The bar never takes focus, so WPF's own modifier state can be stale.
     static bool CtrlDown => (GetAsyncKeyState(0x11) & 0x8000) != 0; // VK_CONTROL
 
     void Tray_MouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (TrayIcon(sender) is not { } icon) return;
         // As Cmd+drag on macOS: Ctrl+drag moves the icon instead of clicking it.
         if (tray != null && e.ChangedButton == MouseButton.Left && CtrlDown)
         {
-            movingIcon = TrayIcon(sender);
+            movingIcon = icon;
             TrayIcons.CaptureMouse(); // not the icon's own element, which re-sorting can take out of the tree
             e.Handled = true;
             return;
         }
-        TrayIcon(sender).IconMouseDown(e.ChangedButton, MouseHelper.GetCursorPositionParam(), GetDoubleClickTime());
+        AllowSetForegroundWindow(uint.MaxValue); // ASFW_ANY: the app's window or menu would otherwise stay behind
+        icon.IconMouseDown(e.ChangedButton, MouseHelper.GetCursorPositionParam(), GetDoubleClickTime());
         e.Handled = true;
     }
 
     void Tray_MouseUp(object sender, MouseButtonEventArgs e)
     {
-        TrayIcon(sender).IconMouseUp(e.ChangedButton, MouseHelper.GetCursorPositionParam(), GetDoubleClickTime());
+        AllowSetForegroundWindow(uint.MaxValue);
+        TrayIcon(sender)?.IconMouseUp(e.ChangedButton, MouseHelper.GetCursorPositionParam(), GetDoubleClickTime());
+        MoveMenuBelowBar();
         e.Handled = true;
+    }
+
+    /// <summary>Apps open their tray menu at the click, inside the bar, which is drawn over it; shift the menu to start under the bar.</summary>
+    void MoveMenuBelowBar()
+    {
+        var bottom = ScreenRect(this).Bottom;
+        var tries = 0;
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(10) };
+        timer.Tick += (_, _) =>
+        {
+            var menu = FindWindow("#32768", null);
+            if (menu != IntPtr.Zero && IsWindowVisible(menu) && GetWindowRect(menu, out var r))
+            {
+                if (r.Top < bottom) SetWindowPos(menu, IntPtr.Zero, r.Left, bottom, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                timer.Stop();
+            }
+            else if (++tries >= 50) timer.Stop(); // the app shows no menu: this click was not a menu click
+        };
+        timer.Start();
     }
 
     void Tray_MouseEnter(object sender, MouseEventArgs e)
     {
         if (movingIcon != null) return;
         var element = (FrameworkElement)sender;
-        var icon = TrayIcon(sender);
-        // Apps place their flyouts next to this rect (Shell_NotifyIconGetRect); physical pixels.
-        var topLeft = element.PointToScreen(new Point(0, 0));
-        var bottomRight = element.PointToScreen(new Point(element.ActualWidth, element.ActualHeight));
-        icon.Placement = new NativeMethods.Rect
-        {
-            Left = (int)topLeft.X, Top = (int)topLeft.Y, Right = (int)bottomRight.X, Bottom = (int)bottomRight.Y,
-        };
+        if (TrayIcon(sender) is not { } icon) return;
+        icon.Placement = ScreenRect(element);
         // Version 4 icons draw their own tooltip; older ones expect the host to show the tip text.
         element.ToolTip = icon.Version >= 4 ? null : icon.Title;
         icon.IconMouseEnter(MouseHelper.GetCursorPositionParam());
     }
 
-    void Tray_MouseLeave(object sender, MouseEventArgs e) => TrayIcon(sender).IconMouseLeave(MouseHelper.GetCursorPositionParam());
+    void Tray_MouseLeave(object sender, MouseEventArgs e) => TrayIcon(sender)?.IconMouseLeave(MouseHelper.GetCursorPositionParam());
     void Tray_MouseMove(object sender, MouseEventArgs e)
     {
-        if (movingIcon == null) TrayIcon(sender).IconMouseMove(MouseHelper.GetCursorPositionParam());
+        if (movingIcon == null) TrayIcon(sender)?.IconMouseMove(MouseHelper.GetCursorPositionParam());
     }
 
     /// <summary>Moves the dragged icon before the first other icon right of the pointer; all shown icons become pinned in that order.</summary>
@@ -460,15 +578,27 @@ public partial class MenuBarWindow : Window
         var next = icons.FirstOrDefault(i => i != moving && TrayIcons.ItemContainerGenerator.ContainerFromItem(i) is FrameworkElement c
             && c.TranslatePoint(new Point(c.ActualWidth / 2, 0), TrayIcons).X > x);
         if (next == icons.ElementAtOrDefault(icons.IndexOf(moving) + 1)) return;
+        MoveTrayIcon(moving, next);
+    }
+
+    /// <summary>Moves the icon before next, or to the end, in the whole tray order (the overflow icons are its leftmost).</summary>
+    void MoveTrayIcon(NotifyIcon icon, NotifyIcon? next)
+    {
         // Unpinned icons are shown left of the pinned ones. A saved identifier can hold an old title, so take the icon's current one.
-        var order = icons.Where(i => !i.IsPinned).Select(i => i.Identifier)
-            .Concat(tray!.PinnedNotifyIcons.Select(p => icons.FirstOrDefault(i => i.IsEqualByIdentifier(p))?.Identifier ?? p));
-        tray.SetPinnedIcons(MoveBefore(order, moving.Identifier, next?.Identifier));
+        var all = trayView!.Cast<NotifyIcon>().ToList();
+        var order = all.Where(i => !i.IsPinned).Select(i => i.Identifier)
+            .Concat(tray!.PinnedNotifyIcons.Select(p => all.FirstOrDefault(i => i.IsEqualByIdentifier(p))?.Identifier ?? p));
+        var result = MoveBefore(order, icon.Identifier, next?.Identifier);
+        tray.SetPinnedIcons(result);
     }
 
     void TrayIcons_MouseUp(object sender, MouseButtonEventArgs e)
     {
-        if (movingIcon != null) TrayIcons.ReleaseMouseCapture(); // ends the move in LostMouseCapture
+        if (movingIcon is not { } moving) return;
+        // Dropped on the overflow button: to the front of the order, where the overflow icons are.
+        if (TrayOverflow.IsVisible && new Rect(TrayOverflow.RenderSize).Contains(e.GetPosition(TrayOverflow)))
+            MoveTrayIcon(moving, trayView!.Cast<NotifyIcon>().FirstOrDefault(i => i != moving));
+        TrayIcons.ReleaseMouseCapture(); // ends the move in LostMouseCapture
     }
 
     void TrayIcons_LostMouseCapture(object sender, MouseEventArgs e)
@@ -526,4 +656,38 @@ public partial class MenuBarWindow : Window
     void Battery_Click(object sender, RoutedEventArgs e) => Sys.Launch("ms-settings:batterysaver");
     void Control_Click(object sender, RoutedEventArgs e) => Sys.WinKey('A');
     void Clock_Click(object sender, RoutedEventArgs e) => Sys.WinKey('N');
+}
+
+/// <summary>
+/// Dark single-color tray icons (Tailscale's, drawn for a light taskbar) vanish on a dark bar; while the bar's text is light,
+/// they are shown inverted. Colored icons pass through untouched.
+/// </summary>
+public class TrayIconTint : System.Windows.Data.IMultiValueConverter
+{
+    public object? Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (values[0] is not System.Windows.Media.Imaging.BitmapSource source) return values[0];
+        if (values[1] is not SolidColorBrush { Color: var fg } || fg.R + fg.G + fg.B < 3 * 128) return source;
+        var pixels = new System.Windows.Media.Imaging.FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+        var stride = pixels.PixelWidth * 4;
+        var bgra = new byte[stride * pixels.PixelHeight];
+        pixels.CopyPixels(bgra, stride, 0);
+        double sum = 0;
+        var count = 0;
+        for (var i = 0; i < bgra.Length; i += 4)
+        {
+            if (bgra[i + 3] < 128) continue;
+            if (Math.Max(bgra[i], Math.Max(bgra[i + 1], bgra[i + 2])) - Math.Min(bgra[i], Math.Min(bgra[i + 1], bgra[i + 2])) > 40) return source;
+            sum += (bgra[i] + bgra[i + 1] + bgra[i + 2]) / 3.0;
+            count++;
+        }
+        if (count == 0 || sum / count >= 100) return source;
+        for (var i = 0; i < bgra.Length; i += 4)
+            (bgra[i], bgra[i + 1], bgra[i + 2]) = ((byte)(255 - bgra[i]), (byte)(255 - bgra[i + 1]), (byte)(255 - bgra[i + 2]));
+        var inverted = System.Windows.Media.Imaging.BitmapSource.Create(pixels.PixelWidth, pixels.PixelHeight, source.DpiX, source.DpiY, PixelFormats.Bgra32, null, bgra, stride);
+        inverted.Freeze();
+        return inverted;
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) => throw new NotSupportedException();
 }

@@ -31,11 +31,17 @@ public class Config
     /// <summary>Dock icon size at rest, in DIPs.</summary>
     public double DockIconSize { get; set; } = 48;
     public bool DockMagnification { get; set; } = true;
+    /// <summary>Menu bar with no background at all; off, it is solid white or dark gray.</summary>
+    public bool MenuBarTransparent { get; set; } = true;
     public bool DockAutoHide { get; set; }
     /// <summary>Slide the auto-hiding dock out and in; off, it disappears and appears at once.</summary>
     public bool DockAutoHideAnimation { get; set; } = true;
     /// <summary>Tray icon identifiers in menu bar order, set by Ctrl+dragging; null keeps network and volume next to the clock.</summary>
     public string[]? TrayOrder { get; set; }
+    /// <summary>Identifiers of the tray icons switched off in settings.</summary>
+    public string[] HiddenTrayIcons { get; set; } = Array.Empty<string>();
+    /// <summary>Most tray icons shown in the menu bar, the rest sit in the overflow menu; 0 shows all.</summary>
+    public int MaxTrayIcons { get; set; }
     /// <summary>Top-left, top-right, bottom-left, bottom-right.</summary>
     public HotCorner[] HotCorners { get; set; } = { new(), new(), new(), new() };
 
@@ -46,6 +52,8 @@ public class Config
             if (File.Exists(FilePath) && JsonSerializer.Deserialize<Config>(File.ReadAllText(FilePath)) is { } loaded)
             {
                 loaded.DockIconSize = Math.Clamp(loaded.DockIconSize, MinIconSize, MaxIconSize); // hand-edited file
+                loaded.MaxTrayIcons = Math.Max(loaded.MaxTrayIcons, 0);
+                loaded.HiddenTrayIcons ??= Array.Empty<string>();
                 if (loaded.HotCorners is not { Length: 4 } || loaded.HotCorners.Any(c => c is null)) loaded.HotCorners = new Config().HotCorners;
                 return loaded;
             }

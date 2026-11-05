@@ -22,14 +22,21 @@ dotnet run -c Release -- --restore
 
 [Inno Setup 6](https://jrsoftware.org/isinfo.php)이 필요합니다(`winget install JRSoftware.InnoSetup`).
 
+보조 키가 지정된 핫 코너를 관리자 권한 앱 위에서도 쓰려면 Mindows를 uiAccess로 실행해야 하며, 이를 위해 (1) 신뢰된 인증서로 서명하고 (2) Program Files에서 실행해야 합니다. 이 PC에서만 신뢰하는 자체 서명 인증서를 씁니다.
+
+1. 인증서 설정(PC마다 한 번, 관리자 PowerShell): `installer\New-SigningCert.ps1`을 실행합니다. 개인 키는 내보낼 수 없게 현재 사용자 저장소에 만들고, 공개 인증서만 이 PC의 신뢰할 수 있는 루트에 등록합니다. 이미 만든 인증서가 있으면 다시 만들지 않습니다. 만료일은 30년입니다. 서명에 타임스탬프가 없어 인증서가 만료되면 Mindows가 시작되지 않습니다.
+2. 게시와 서명: `-p:UiAccess=true`를 붙이면 uiAccess 매니페스트(`app.uiaccess.manifest`)를 넣고 게시 후 signtool(Windows SDK)로 서명합니다. 인증서가 없으면 게시가 실패합니다. 이 속성 없이 게시하거나 `dotnet run`을 쓰면 uiAccess가 없는 일반 빌드가 만들어집니다. 서명에 실패하면 `publish`에 서명되지 않은 uiAccess 실행 파일이 남으니 사용하지 마세요.
+3. 설치 프로그램 만들기:
+
 ```bash
-dotnet publish -c Release -r win-x64 --self-contained -o publish
+dotnet publish -c Release -r win-x64 --self-contained -o publish -p:UiAccess=true
 iscc installer\Mindows.iss
 ```
 
 `installer\Output\MindowsSetup-<버전>.exe`가 만들어집니다. 버전은 `Mindows.csproj`의 `<Version>`을 따릅니다. .NET 런타임을 포함하므로 대상 PC에 런타임을 따로 설치할 필요가 없습니다.
 
-- 관리자 권한 없이 `%LOCALAPPDATA%\Programs\Mindows`에 설치하고, 시작 메뉴에 바로 가기를 만듭니다.
+- 관리자 권한(UAC)으로 `C:\Program Files\Mindows`에 설치하고, 시작 메뉴에 바로 가기를 만듭니다.
+- 예전 사용자별 설치(`%LOCALAPPDATA%\Programs\Mindows`)가 있으면 먼저 제거합니다. 이때 로그인 시 자동 실행 작업도 함께 지워지므로, 설치 후 Mindows 설정에서 로그인 시 자동 실행을 다시 켜야 합니다. 이전 설치를 제거한 뒤 설치를 취소하면 Mindows가 설치되지 않은 상태로 남습니다. 설치 프로그램을 다른 계정의 관리자 권한으로 올려 실행하면 이전 설치를 찾지 못합니다.
 - 업그레이드할 때는 실행 중인 Mindows를 종료하고 작업 표시줄을 복원한 뒤 파일을 교체합니다.
 - 제거할 때는 Mindows를 종료하고 작업 표시줄을 복원하며, 로그인 시 자동 실행 작업도 삭제합니다. `%APPDATA%\Mindows`의 설정은 남깁니다.
 
@@ -84,8 +91,9 @@ iscc installer\Mindows.iss
 ## 제한 사항
 
 - 주 모니터만 지원합니다.
-- 관리자 권한으로 실행된 앱의 트레이 아이콘은 클릭에 반응하지 않을 수 있습니다(Windows의 권한 격리, UIPI). 이 경우 Mindows를 관리자 권한으로 실행해야 할 수 있습니다.
-- 같은 이유로, 관리자 권한으로 실행된 앱이 활성 창인 동안에는 보조 키를 눌러도 Mindows가 읽지 못하므로 보조 키가 지정된 핫 코너가 동작하지 않습니다. 보조 키 없이 지정한 핫 코너는 동작합니다.
+- 관리자 권한으로 실행된 앱의 트레이 아이콘은 클릭에 반응하지 않을 수 있습니다(Windows의 권한 격리, UIPI). uiAccess 빌드는 높은 권한의 창에도 입력과 메시지를 보낼 수 있어 클릭이 전달될 것으로 예상합니다. 일반 권한 앱의 아이콘은 메시지 필터(`ChangeWindowMessageFilter`)로 계속 동작하게 했습니다. 둘 다 설치해서 확인하기 전까지는 검증하지 않았습니다. uiAccess가 아닌 빌드에서는 Mindows를 관리자 권한으로 실행해야 할 수 있습니다.
+- 같은 이유로, uiAccess가 아닌 빌드에서는 관리자 권한으로 실행된 앱이 활성 창인 동안 보조 키를 읽지 못해 보조 키가 지정된 핫 코너가 동작하지 않습니다. 보조 키 없이 지정한 핫 코너는 동작합니다. 설치 프로그램으로 설치한 uiAccess 빌드에서는 이 제한이 없을 것으로 예상하지만 아직 확인하지 않았습니다.
+- uiAccess용 서명 키는 이 PC의 현재 사용자 계정에 있으므로, 이 계정으로 실행되는 프로그램은 같은 인증서로 서명할 수 있습니다. 다만 uiAccess가 동작하려면 서명한 파일이 Program Files에 있어야 하므로 관리자 권한도 필요합니다. 독 등에서 실행하는 앱은 Explorer를 통해 시작하므로 uiAccess 토큰을 물려받지 않으며, Explorer를 쓸 수 없을 때만 Mindows가 직접 시작해 토큰을 물려받습니다. 신뢰하는 PC에서만 쓰세요.
 - Mindows가 실행되는 동안 다른 앱의 작업 표시줄 상태 조회(`ABM_GETSTATE` 등)는 ManagedShell이 응답합니다.
-- 앱별 전역 메뉴(파일/편집/보기 등), Mission Control, Launchpad, Spotlight, 탐색기에서 Dock으로 끌어 놓기, 자동 시작은 구현하지 않았습니다.
+- 앱별 전역 메뉴(파일/편집/보기 등), Mission Control, Launchpad, Spotlight, 탐색기에서 Dock으로 끌어 놓기는 구현하지 않았습니다.
 - 테마(라이트/다크)는 시작할 때 한 번만 읽습니다.

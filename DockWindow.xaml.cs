@@ -9,6 +9,8 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using ManagedShell.Common.Helpers;
+using ManagedShell.WindowsTray;
 using static Mindows.Native;
 
 namespace Mindows;
@@ -43,6 +45,8 @@ public partial class DockWindow : Window
         public Ellipse? Dot;
         public Rectangle? Line;
     }
+
+    public NotificationArea? Tray { get; set; }
 
     readonly Config config;
     readonly AppBar bar;
@@ -575,11 +579,28 @@ public partial class DockWindow : Window
         else if (s == search) ClickSearch();
         else if (s.Windows.Count == 0)
         {
-            Sys.Launch(s.Key);
+            // A running app that lives in the tray would only get a slow second launch; double-click its icon instead.
+            if (!DoubleClickTrayIcon(s.Key)) Sys.Launch(s.Key);
             Bounce(s);
         }
         // Already in front: cycle to its bottom-most window.
         else Sys.Focus(s.Windows.Contains(GetForegroundWindow()) ? s.Windows[^1] : s.Windows[0]);
+    }
+
+    bool DoubleClickTrayIcon(string exe)
+    {
+        // Explorer's tray icons are system icons (network, volume), not its windows; double-clicking one opens Settings.
+        if (string.Equals(System.IO.Path.GetFileName(exe), "explorer.exe", StringComparison.OrdinalIgnoreCase)) return false;
+        var icon = Tray?.TrayIcons.OfType<NotifyIcon>().FirstOrDefault(i => string.Equals(i.Path, exe, StringComparison.OrdinalIgnoreCase));
+        if (icon == null) return false;
+        AllowSetForegroundWindow(uint.MaxValue);
+        var at = MouseHelper.GetCursorPositionParam();
+        for (var i = 0; i < 2; i++)
+        {
+            icon.IconMouseDown(MouseButton.Left, at, GetDoubleClickTime());
+            icon.IconMouseUp(MouseButton.Left, at, GetDoubleClickTime());
+        }
+        return true;
     }
 
     static void Bounce(Slot s)
@@ -620,7 +641,7 @@ public partial class DockWindow : Window
             }
             items.Add(Menus.Item("Dock에 유지", () => TogglePin(s), isChecked: s.Pinned));
             if (!s.Key.StartsWith("shell:", StringComparison.OrdinalIgnoreCase))
-                items.Add(Menus.Item("파일 위치 열기", () => Process.Start("explorer.exe", $"/select,\"{s.Key}\"")));
+                items.Add(Menus.Item("파일 위치 열기", () => Sys.Launch("explorer.exe", $"/select,\"{s.Key}\"")));
             items.Add(null);
             items.Add(s.Windows.Count > 0
                 ? Menus.Item("종료", () => s.Windows.ForEach(Sys.Close))

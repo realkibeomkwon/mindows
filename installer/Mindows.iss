@@ -1,4 +1,4 @@
-﻿; Build: dotnet publish -c Release -r win-x64 --self-contained -o publish
+﻿; Build: dotnet publish -c Release -r win-x64 --self-contained -o publish -p:UiAccess=true
 ;        iscc installer\Mindows.iss
 #define AppExe "Mindows.exe"
 #define AppVersion GetVersionNumbersString("..\publish\" + AppExe)
@@ -9,10 +9,12 @@ AppId={{B2942517-9E3F-4699-89A8-47348B8E3006}
 AppName=Mindows
 AppVersion={#AppVersion}
 AppPublisher=Kibeom Kwon
-; Per-user: {autopf} is %LOCALAPPDATA%\Programs, and the logon task runs as the user anyway.
-PrivilegesRequired=lowest
+; uiAccess only works from a secure location, so this installs to Program Files and needs admin.
+PrivilegesRequired=admin
 DefaultDirName={autopf}\Mindows
 DisableProgramGroupPage=yes
+; Outside Program Files uiAccess would not start.
+DisableDirPage=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ; PrepareToInstall stops Mindows itself; Restart Manager would only prompt.
@@ -35,11 +37,11 @@ Name: "{autoprograms}\Mindows"; Filename: "{app}\{#AppExe}"
 Name: "{autoprograms}\Mindows 작업 표시줄 복원"; Filename: "{app}\{#AppExe}"; Parameters: "--restore"
 
 [Run]
-Filename: "{app}\{#AppExe}"; Description: "Mindows 실행"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\{#AppExe}"; Description: "Mindows 실행"; Flags: postinstall nowait skipifsilent shellexec runasoriginaluser
 
 [UninstallRun]
 Filename: "{sys}\taskkill.exe"; Parameters: "/IM {#AppExe} /F"; Flags: runhidden; RunOnceId: "Kill"
-Filename: "{app}\{#AppExe}"; Parameters: "--restore"; Flags: runhidden; RunOnceId: "Restore"
+Filename: "{app}\{#AppExe}"; Parameters: "--restore"; Flags: runhidden shellexec waituntilterminated; RunOnceId: "Restore"
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN Mindows /F"; Flags: runhidden; RunOnceId: "LogonTask"
 
 [Code]
@@ -47,10 +49,37 @@ Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN Mindows /F"; Flags: run
 // in case the user skips the relaunch or the install is silent.
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
-  Exe: String;
+  Exe, OldUninstaller, OldKey: String;
   Code, I: Integer;
 begin
   Result := '';
+  // Builds before the Program Files move installed per user. An admin install only sees HKLM, so remove that copy here;
+  // its uninstaller also stops Mindows, restores the taskbar and deletes the logon task.
+  OldKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{B2942517-9E3F-4699-89A8-47348B8E3006}_is1';
+  if RegQueryStringValue(HKCU, OldKey, 'UninstallString', OldUninstaller) then
+  begin
+    if not FileExists(RemoveQuotes(OldUninstaller)) then
+    begin
+      // Stale entry of a copy that was deleted by hand; its logon task would still point at the deleted exe.
+      RegDeleteKeyIncludingSubkeys(HKCU, OldKey);
+      Exec(ExpandConstant('{sys}\schtasks.exe'), '/Delete /TN Mindows /F', '', SW_HIDE, ewWaitUntilTerminated, Code);
+    end
+    else
+    begin
+      Exec(RemoveQuotes(OldUninstaller), '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, Code);
+      // The first-phase uninstaller can return before the copy that does the work has finished.
+      for I := 1 to 300 do
+      begin
+        if not RegKeyExists(HKCU, OldKey) then Break;
+        Sleep(100);
+      end;
+      if RegKeyExists(HKCU, OldKey) then
+      begin
+        Result := '이전 사용자별 설치를 제거하지 못했습니다. 설정의 앱 목록에서 Mindows를 먼저 제거하세요.';
+        Exit;
+      end;
+    end;
+  end;
   Exe := ExpandConstant('{app}\{#AppExe}');
   if not FileExists(Exe) then Exit;
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM {#AppExe} /F', '', SW_HIDE, ewWaitUntilTerminated, Code);
@@ -61,5 +90,6 @@ begin
     if Code <> 0 then Break;
     Sleep(100);
   end;
-  Exec(Exe, '--restore', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  // ShellExec: a uiAccess exe fails CreateProcess with 740.
+  ShellExec('', Exe, '--restore', '', SW_HIDE, ewWaitUntilTerminated, Code);
 end;

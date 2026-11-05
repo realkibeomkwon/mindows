@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using ManagedShell.WindowsTray;
 using Microsoft.Win32;
 using static Mindows.Native;
 
@@ -21,20 +22,22 @@ public partial class SettingsWindow : Window
 
     readonly Config config;
     readonly DockWindow dock;
+    readonly NotificationArea? tray;
+    readonly MenuBarWindow bar;
     bool syncing = true; // InitializeComponent coerces the slider to its minimum; that is not a user change
 
-    public static void Open(Config config, DockWindow dock)
+    public static void Open(Config config, DockWindow dock, NotificationArea? tray, MenuBarWindow bar)
     {
-        open ??= new SettingsWindow(config, dock);
+        open ??= new SettingsWindow(config, dock, tray, bar);
         open.Show();
         // The taskbar is hidden and the dock skips Mindows' windows, so restoring here is the only way back.
         if (open.WindowState == WindowState.Minimized) open.WindowState = WindowState.Normal;
         open.Activate();
     }
 
-    SettingsWindow(Config config, DockWindow dock)
+    SettingsWindow(Config config, DockWindow dock, NotificationArea? tray, MenuBarWindow bar)
     {
-        (this.config, this.dock) = (config, dock);
+        (this.config, this.dock, this.tray, this.bar) = (config, dock, tray, bar);
         InitializeComponent();
         Sync();
         Activated += (_, _) => Sync(); // the dock's resize handle changes the size too
@@ -43,7 +46,41 @@ public partial class SettingsWindow : Window
         {
             var dark = App.LightTheme ? 0 : 1;
             DwmSetWindowAttribute(new WindowInteropHelper(this).Handle, 20, ref dark, sizeof(int)); // DWMWA_USE_IMMERSIVE_DARK_MODE
+            ApplyBackdrop();
         };
+        // Windows broadcasts a setting change when its transparency effects are switched.
+        UserPreferenceChangedEventHandler onPrefs = (_, _) => Dispatcher.BeginInvoke(() => { Sync(); ApplyBackdrop(); });
+        SystemEvents.UserPreferenceChanged += onPrefs;
+        Closed += (_, _) => SystemEvents.UserPreferenceChanged -= onPrefs;
+    }
+
+    // Absent means on, as in Windows itself.
+    static bool WindowsTransparency() =>
+        Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency", 1) is not 0;
+
+    /// <summary>Acrylic behind a see-through sidebar while Windows' transparency effects are on; otherwise the opaque look.</summary>
+    void ApplyBackdrop()
+    {
+        var on = WindowsTransparency();
+        var handle = new WindowInteropHelper(this).Handle;
+        if (HwndSource.FromHwnd(handle)?.CompositionTarget is { } target)
+            target.BackgroundColor = on ? System.Windows.Media.Colors.Transparent : System.Windows.SystemColors.WindowColor;
+        var margins = new Margins { Left = on ? -1 : 0, Right = on ? -1 : 0, Top = on ? -1 : 0, Bottom = on ? -1 : 0 };
+        DwmExtendFrameIntoClientArea(handle, ref margins);
+        var backdrop = on ? 3 : 1; // DWMWA_SYSTEMBACKDROP_TYPE: acrylic / none
+        DwmSetWindowAttribute(handle, 38, ref backdrop, sizeof(int));
+        if (on)
+        {
+            Background = System.Windows.Media.Brushes.Transparent;
+            var tint = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(App.LightTheme ? "#66F1EFEE" : "#66202020"));
+            tint.Freeze();
+            Resources["PaneBg"] = tint;
+        }
+        else
+        {
+            SetResourceReference(BackgroundProperty, "WindowBg");
+            Resources.Remove("PaneBg");
+        }
     }
 
     void Sync()
@@ -56,10 +93,66 @@ public partial class SettingsWindow : Window
         Magnification.IsChecked = config.DockMagnification;
         AutoHide.IsChecked = config.DockAutoHide;
         AutoHideAnimation.IsChecked = config.DockAutoHideAnimation;
+        MenuBarTransparent.IsChecked = config.MenuBarTransparent;
+        Translucency.IsChecked = WindowsTransparency(); // the setting is Windows' own, so the switch mirrors it
         for (var i = 0; i < 4; i++) CornerButtons[i].Content = HotCorners.Describe(config.HotCorners[i].Action, config.HotCorners[i].Modifiers);
         WallpaperPreview.Source = Wallpaper();
+        MaxTrayBox.Text = $"{config.MaxTrayIcons}";
+        SyncTrayList();
         syncing = false;
     }
+
+    /// <summary>One switch per tray icon the apps have added; icons switched off stay listed so they can be switched back on.</summary>
+    void SyncTrayList()
+    {
+        TrayList.Children.Clear();
+        var icons = tray?.TrayIcons.Cast<NotifyIcon>().Where(MenuBarWindow.Listed).ToList() ?? new();
+        TrayEmpty.Visibility = icons.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var icon in icons)
+        {
+            if (TrayList.Children.Count > 0) TrayList.Children.Add(new Border { Style = (Style)FindResource("RowLine") });
+            var name = MenuBarWindow.IconName(icon);
+            var row = new DockPanel { Style = (Style)FindResource("Row") };
+            var toggle = new CheckBox
+            {
+                Style = (Style)FindResource("Switch"),
+                IsChecked = !config.HiddenTrayIcons.Any(icon.IsEqualByIdentifier),
+            };
+            System.Windows.Automation.AutomationProperties.SetName(toggle, name);
+            toggle.Click += (_, _) =>
+            {
+                var rest = config.HiddenTrayIcons.Where(h => !icon.IsEqualByIdentifier(h));
+                config.HiddenTrayIcons = (toggle.IsChecked == true ? rest : rest.Append(icon.Identifier)).ToArray();
+                config.Save();
+                bar.ApplyTray();
+            };
+            DockPanel.SetDock(toggle, Dock.Right);
+            row.Children.Add(toggle);
+            row.Children.Add(new TextBlock { Text = name, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
+            TrayList.Children.Add(row);
+        }
+    }
+
+    /// <summary>Applies a typed maximum; anything that is not a number puts the current one back.</summary>
+    void CommitMaxTrayBox()
+    {
+        if (int.TryParse(MaxTrayBox.Text, out var max) && max >= 0 && max != config.MaxTrayIcons)
+        {
+            config.MaxTrayIcons = max;
+            config.Save();
+            bar.ApplyTray();
+        }
+        MaxTrayBox.Text = $"{config.MaxTrayIcons}";
+    }
+
+    void MaxTrayBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        CommitMaxTrayBox();
+        MaxTrayBox.SelectAll();
+    }
+
+    void MaxTrayBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) => CommitMaxTrayBox();
 
     Button[] CornerButtons => new[] { CornerTopLeft, CornerTopRight, CornerBottomLeft, CornerBottomRight }; // Config.HotCorners order
 
@@ -71,7 +164,7 @@ public partial class SettingsWindow : Window
     {
         var button = (Button)sender;
         var corner = config.HotCorners[Array.IndexOf(CornerButtons, button)];
-        var menu = new ContextMenu { PlacementTarget = button, Placement = PlacementMode.Bottom };
+        var menu = new ContextMenu { PlacementTarget = button, Placement = PlacementMode.Bottom, HorizontalOffset = -Menus.ShadowMargin, VerticalOffset = -Menus.ShadowMargin };
         var items = new List<(MenuItem item, HotCornerAction action)>();
         foreach (var action in HotCorners.Menu)
         {
@@ -80,7 +173,7 @@ public partial class SettingsWindow : Window
                 menu.Items.Add(new Separator());
                 continue;
             }
-            var item = new MenuItem { IsChecked = a == corner.Action };
+            var item = new MenuItem { IsChecked = a == corner.Action, Padding = new Thickness(26, 0, 12, 0) }; // room for the check, as in Menus.Show
             item.Click += (_, _) =>
             {
                 corner.Action = a;
@@ -111,7 +204,7 @@ public partial class SettingsWindow : Window
     }
 
     /// <summary>The desktop picture as Windows last drew it; null for a solid color or a missing file.</summary>
-    static BitmapImage? Wallpaper()
+    internal static BitmapImage? Wallpaper()
     {
         try
         {
@@ -177,7 +270,8 @@ public partial class SettingsWindow : Window
 
     /// <summary>
     /// Starts Mindows as soon as the user signs in. The task's defaults would stop a shell after 3 days or on battery,
-    /// and a hard stop leaves the taskbar hidden.
+    /// and a hard stop leaves the taskbar hidden. The task goes through ShellExecute because CreateProcess
+    /// fails with 740 on a uiAccess exe.
     /// </summary>
     static string LogonTaskXml()
     {
@@ -193,12 +287,31 @@ public partial class SettingsWindow : Window
                 <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
                 <Priority>4</Priority>
               </Settings>
-              <Actions><Exec><Command>{SecurityElement.Escape(Environment.ProcessPath)}</Command></Exec></Actions>
+              <Actions><Exec><Command>rundll32.exe</Command><Arguments>url.dll,FileProtocolHandler "{SecurityElement.Escape(Environment.ProcessPath)}"</Arguments></Exec></Actions>
             </Task>
             """;
     }
 
     void IconSizeBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) => CommitIconSizeBox();
+    // Windows' transparency effects are system-wide; this switch writes the same setting the Settings app does.
+    void Translucency_Click(object sender, RoutedEventArgs e)
+    {
+        using (var key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
+            key.SetValue("EnableTransparency", Translucency.IsChecked == true ? 1 : 0, RegistryValueKind.DWord);
+        var area = System.Runtime.InteropServices.Marshal.StringToHGlobalUni("ImmersiveColorSet");
+        try { SendMessageTimeout((IntPtr)0xFFFF, 0x1A /* WM_SETTINGCHANGE */, IntPtr.Zero, area, 2 /* SMTO_ABORTIFHUNG */, 1000, out _); }
+        finally { System.Runtime.InteropServices.Marshal.FreeHGlobal(area); }
+        ApplyBackdrop();
+    }
+
+    void MenuBarTransparent_Click(object sender, RoutedEventArgs e)
+    {
+        config.MenuBarTransparent = MenuBarTransparent.IsChecked == true;
+        config.Save();
+        App.ApplyBarBackground(config.MenuBarTransparent);
+        bar.UpdateForeground();
+    }
+
     void Magnification_Click(object sender, RoutedEventArgs e) => dock.SetMagnification(Magnification.IsChecked == true);
     void AutoHide_Click(object sender, RoutedEventArgs e) => dock.SetAutoHide(AutoHide.IsChecked == true);
 

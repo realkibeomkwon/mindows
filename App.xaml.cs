@@ -37,14 +37,16 @@ public partial class App : Application
 
         // The bars run all session: software rendering keeps about 40 MB less than the GPU path, at the same CPU while the dock animates.
         RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
-        ApplyTheme();
         var config = Config.Load();
+        ApplyTheme(config.MenuBarTransparent);
         Taskbar.WaitForExplorer();
         // Hide first: the tray host takes over the Shell_TrayWnd class, and the state file must hold Explorer's state.
         Taskbar.Hide();
         shell = StartTrayHost(config.TrayOrder);
-        var dock = new DockWindow(config);
-        new MenuBarWindow(shell?.NotificationArea, config, dock, () => SettingsWindow.Open(config, dock)).Show();
+        var dock = new DockWindow(config) { Tray = shell?.NotificationArea };
+        MenuBarWindow bar = null!; // the settings callback runs only after this is assigned
+        bar = new MenuBarWindow(shell?.NotificationArea, config, dock, () => SettingsWindow.Open(config, dock, shell?.NotificationArea, bar));
+        bar.Show();
         dock.Show();
         HotCorners.Start(config);
     }
@@ -64,6 +66,11 @@ public partial class App : Application
         var config = ShellManager.DefaultShellConfig;
         config.EnableTasksService = false;
         config.PinnedNotifyIcons = trayOrder ?? new[] { NotificationArea.NETWORK_GUID, NotificationArea.VOLUME_GUID };
+        // A uiAccess process runs above the apps that talk to it, so UIPI would drop their tray and app bar data (WM_COPYDATA)
+        // and the TaskbarCreated broadcast.
+        Native.ChangeWindowMessageFilter(0x4A /* WM_COPYDATA */, 1 /* MSGFLT_ADD */);
+        Native.ChangeWindowMessageFilter(Native.RegisterWindowMessage("TaskbarCreated"), 1);
+        Native.ChangeWindowMessageFilter(Native.RegisterWindowMessage("MindowsAppBar"), 1); // AppBar.CallbackMsg, sent by Explorer
         try { return new ShellManager(config); }
         catch (Exception e) // the bars still work without tray icons
         {
@@ -95,20 +102,30 @@ public partial class App : Application
         catch (IOException) { }
     }
 
-    void ApplyTheme()
+    /// <summary>The bar's background alone, for when the setting changes while running. Alpha 1 rather than 0 keeps a transparent bar clickable.</summary>
+    public static void ApplyBarBackground(bool transparent)
+    {
+        var color = transparent ? "#01000000" : LightTheme ? "#FFFFFFFF" : "#FF2B2B2B";
+        var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
+        brush.Freeze();
+        Current.Resources["BarBg"] = brush;
+    }
+
+    void ApplyTheme(bool barTransparent)
     {
         LightTheme = Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
             "SystemUsesLightTheme", 0) is 1;
         // WindowBg is opaque: normal (non-layered) windows draw translucent backgrounds over black.
         var colors = LightTheme
-            ? new[] { "#B8F4F4F4", "#FF1C1C1C", "#F2F6F6F6", "#FF1C1C1C", "#22000000", "#1F000000", "#73F2F2F2", "#55FFFFFF", "#FFF4F4F4" }
-            : new[] { "#8C1E1E1E", "#FFF5F5F5", "#F22B2B2B", "#FFF0F0F0", "#33FFFFFF", "#33FFFFFF", "#662A2A2A", "#33FFFFFF", "#FF242424" };
-        string[] keys = { "BarBg", "BarFg", "MenuBg", "MenuFg", "MenuBorder", "Hover", "DockBg", "DockBorder", "WindowBg" };
+            ? new[] { "#B8F4F4F4", "#FF1C1C1C", "#F2F6F6F6", "#FF1C1C1C", "#22000000", "#1F000000", "#73F2F2F2", "#55FFFFFF", "#FFFFFFFF", "#FFF1EFEE", "#FFF7F7F7" }
+            : new[] { "#8C1E1E1E", "#FFF5F5F5", "#F22B2B2B", "#FFF0F0F0", "#33FFFFFF", "#33FFFFFF", "#662A2A2A", "#33FFFFFF", "#FF242424", "#33FFFFFF", "#33FFFFFF" };
+        string[] keys = { "BarBg", "BarFg", "MenuBg", "MenuFg", "MenuBorder", "Hover", "DockBg", "DockBorder", "WindowBg", "PaneBg", "CardBg" };
         for (var i = 0; i < keys.Length; i++)
         {
             var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(colors[i]));
             brush.Freeze();
             Resources[keys[i]] = brush;
         }
+        ApplyBarBackground(barTransparent);
     }
 }

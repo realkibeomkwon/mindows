@@ -14,6 +14,7 @@ static class Sys
     {
         try
         {
+            if (LaunchViaExplorer(path, args)) return;
             if (path.StartsWith("shell:", StringComparison.OrdinalIgnoreCase) || path.StartsWith("::"))
                 Process.Start("explorer.exe", path);
             else
@@ -22,6 +23,29 @@ static class Sys
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
             MessageBox.Show($"{path}\n\n{e.Message}", "Mindows", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    /// <summary>
+    /// Has Explorer start the app through its desktop view. A child of this process would inherit the uiAccess token's
+    /// raised integrity, and dock-launched apps must run as a normal user. Returns false when Explorer's desktop is not available.
+    /// </summary>
+    static bool LaunchViaExplorer(string path, string args)
+    {
+        try
+        {
+            dynamic windows = Activator.CreateInstance(Type.GetTypeFromCLSID(new Guid("9BA05972-F6A8-11CF-A442-00A0C90A8F39"))!)!; // ShellWindows
+            object location = 0 /* CSIDL_DESKTOP */, root = Type.Missing;
+            dynamic desktop = windows.FindWindowSW(ref location, ref root, 8 /* SWC_DESKTOP */, out int _, 1 /* SWFO_NEEDDISPATCH */);
+            dynamic shell = desktop.Document.Application;
+            GetWindowThreadProcessId(GetShellWindow(), out var pid);
+            AllowSetForegroundWindow(pid); // the app's window would otherwise open behind
+            shell.ShellExecute(path, args, null, null, 1 /* SW_SHOWNORMAL */);
+            return true;
+        }
+        catch (Exception) // COM failures surface as many exception types; the direct launch is the fallback
+        {
+            return false;
         }
     }
 
@@ -53,9 +77,12 @@ static class Sys
 
 static class Menus
 {
-    public static MenuItem Item(string header, Action onClick, bool enabled = true, bool isChecked = false)
+    public const double ShadowMargin = 28; // keep equal to the ContextMenu template's outer margin in App.xaml
+
+    public static MenuItem Item(string header, Action onClick, bool enabled = true, bool? isChecked = null, string? shortcut = null)
     {
-        var item = new MenuItem { Header = header, IsEnabled = enabled, IsChecked = isChecked };
+        // Tag marks items that have a check state, so Show can reserve the check column for the whole menu.
+        var item = new MenuItem { Header = header, IsEnabled = enabled, IsChecked = isChecked == true, InputGestureText = shortcut, Tag = isChecked == null ? null : "check" };
         item.Click += (_, _) => onClick();
         return item;
     }
@@ -63,8 +90,14 @@ static class Menus
     /// <summary>Opens a menu at <paramref name="target"/>; null entries become separators.</summary>
     public static void Show(UIElement target, PlacementMode placement, IEnumerable<Control?> items)
     {
-        var menu = new ContextMenu { PlacementTarget = target, Placement = placement };
+        // The template keeps ShadowMargin of transparent space around the menu for its shadow; offset it away so the visible edge meets the target.
+        var menu = new ContextMenu { PlacementTarget = target, Placement = placement, HorizontalOffset = -ShadowMargin };
+        menu.VerticalOffset = placement == PlacementMode.Top ? ShadowMargin : -ShadowMargin;
         foreach (var item in items) menu.Items.Add(item ?? new Separator());
+        // macOS aligns every title right of a shared state column when any item can be checked.
+        var entries = menu.Items.OfType<MenuItem>().ToList();
+        if (entries.Any(i => i.Tag is "check"))
+            entries.ForEach(i => i.Padding = new Thickness(26, 0, 12, 0));
 
         menu.IsOpen = true;
         WatchForDismiss(menu);

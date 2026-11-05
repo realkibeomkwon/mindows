@@ -11,6 +11,26 @@
     <Version>1.0.0</Version>
   </PropertyGroup>
 
+  <!-- dotnet publish ... -p:UiAccess=true: see README. Not tied to Release, since dotnet run -c Release runs from bin\ and a uiAccess exe only starts from Program Files. -->
+  <PropertyGroup Condition="'$(UiAccess)' == 'true'">
+    <ApplicationManifest>app.uiaccess.manifest</ApplicationManifest>
+    <!-- Changes the compiler inputs, so toggling UiAccess rebuilds the dll and apphost instead of reusing the old manifest. -->
+    <DefineConstants>$(DefineConstants);UIACCESS</DefineConstants>
+    <SigningSubject>Mindows Local Code Signing</SigningSubject>
+  </PropertyGroup>
+
+  <Target Name="SignUiAccess" AfterTargets="Publish" Condition="'$(UiAccess)' == 'true'">
+    <ItemGroup>
+      <SignToolCandidate Include="$(MSBuildProgramFiles32)\Windows Kits\10\bin\*\x64\signtool.exe" />
+    </ItemGroup>
+    <PropertyGroup>
+      <SignTool>%(SignToolCandidate.FullPath)</SignTool>
+    </PropertyGroup>
+    <Error Condition="'$(SignTool)' == ''" Text="signtool.exe not found; install the Windows SDK." />
+    <!-- An unsigned uiAccess exe will not start, so a missing certificate fails the publish. -->
+    <Exec Command="&quot;$(SignTool)&quot; sign /fd sha256 /n &quot;$(SigningSubject)&quot; /s My &quot;$(PublishDir)$(AssemblyName).exe&quot;" />
+  </Target>
+
   <ItemGroup>
     <Using Include="System.IO" />
   </ItemGroup>
