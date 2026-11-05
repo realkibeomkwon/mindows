@@ -108,9 +108,9 @@ public partial class App : Application
             "SystemUsesLightTheme", 0) is 1;
         // WindowBg is opaque: normal (non-layered) windows draw translucent backgrounds over black.
         var colors = LightTheme
-            ? new[] { "#B8F4F4F4", "#FF1C1C1C", "#F2F6F6F6", "#FF1C1C1C", "#22000000", "#1F000000", "#73F2F2F2", "#55FFFFFF", "#FFF4F4F4" }
-            : new[] { "#8C1E1E1E", "#FFF5F5F5", "#F22B2B2B", "#FFF0F0F0", "#33FFFFFF", "#33FFFFFF", "#662A2A2A", "#33FFFFFF", "#FF242424" };
-        string[] keys = { "BarBg", "BarFg", "MenuBg", "MenuFg", "MenuBorder", "Hover", "DockBg", "DockBorder", "WindowBg" };
+            ? new[] { "#B8F4F4F4", "#FF1C1C1C", "#F2F6F6F6", "#FF1C1C1C", "#22000000", "#1F000000", "#73F2F2F2", "#55FFFFFF", "#FFFFFFFF", "#FFF6F6F6", "#FFFFFFFF" }
+            : new[] { "#8C1E1E1E", "#FFF5F5F5", "#F22B2B2B", "#FFF0F0F0", "#33FFFFFF", "#33FFFFFF", "#662A2A2A", "#33FFFFFF", "#FF242424", "#33FFFFFF", "#33FFFFFF" };
+        string[] keys = { "BarBg", "BarFg", "MenuBg", "MenuFg", "MenuBorder", "Hover", "DockBg", "DockBorder", "WindowBg", "PaneBg", "CardBg" };
         for (var i = 0; i < keys.Length; i++)
         {
             var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(colors[i]));

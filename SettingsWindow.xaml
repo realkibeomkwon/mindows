@@ -20,7 +20,7 @@
                                                FontSize="13" Foreground="White"
                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
-                                <ContentPresenter ContentSource="Header" VerticalAlignment="Center"/>
+                                <ContentPresenter x:Name="Hdr" ContentSource="Header" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -29,7 +29,7 @@
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{StaticResource Accent}"/>
-                                <Setter Property="Foreground" Value="White"/>
+                                <Setter TargetName="Hdr" Property="TextElement.Foreground" Value="White"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -39,7 +39,7 @@
 
         <!-- A group of rows, as on macOS. -->
         <Style x:Key="Card" TargetType="Border">
-            <Setter Property="Background" Value="{DynamicResource Hover}"/>
+            <Setter Property="Background" Value="{DynamicResource CardBg}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource MenuBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="9"/>
@@ -199,7 +199,7 @@
                         <ColumnDefinition Width="200"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <Border Background="{DynamicResource Hover}" BorderBrush="{DynamicResource MenuBorder}" BorderThickness="0,0,1,0">
+                    <Border Background="{DynamicResource PaneBg}" BorderBrush="{DynamicResource MenuBorder}" BorderThickness="0,0,1,0">
                         <StackPanel IsItemsHost="True" Margin="10,12" KeyboardNavigation.DirectionalNavigation="Cycle"/>
                     </Border>
                     <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
