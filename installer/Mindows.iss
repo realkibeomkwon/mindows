@@ -30,6 +30,8 @@ Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
 
 [Files]
 Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Pretendard is embedded in Mindows.exe; its SIL OFL text travels with it.
+Source: "..\Fonts\LICENSE.txt"; DestDir: "{app}\licenses"; DestName: "Pretendard-LICENSE.txt"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\Mindows"; Filename: "{app}\{#AppExe}"

@@ -5,14 +5,15 @@
     <Application.Resources>
         <!-- Theme brushes (BarBg, BarFg, MenuBg, ...) are set in App.ApplyTheme. -->
         <SolidColorBrush x:Key="Accent" Color="#2F6FE4"/>
-        <!-- Pretendard is close to the macOS system font; it is often not installed, so Windows' own UI font follows. -->
-        <FontFamily x:Key="UiFont">Pretendard, Segoe UI Variable Text, Segoe UI</FontFamily>
+        <!-- Pretendard is close to the macOS system font. It is embedded (Fonts\, SIL OFL) so it does not depend on being installed; Windows' own UI font follows. -->
+        <FontFamily x:Key="UiFont">pack://application:,,,/Fonts/#Pretendard, Segoe UI Variable Text, Segoe UI</FontFamily>
 
         <!-- Geometry traced from macOS menu captures at 2x, in pt as DIPs: 24 high rows, 6 inset around the rows,
              11 high separators, text 10 inside the highlight, a 14 corner radius and a wide, soft shadow (28 of transparent margin holds it). -->
         <Style TargetType="ContextMenu">
             <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
             <Setter Property="FontSize" Value="13"/>
+            <Setter Property="TextOptions.TextHintingMode" Value="Animated"/>
             <Setter Property="Foreground" Value="{DynamicResource MenuFg}"/>
             <Setter Property="MinWidth" Value="256"/>
             <Setter Property="Template">

@@ -6,7 +6,7 @@
         ShowInTaskbar="False" Topmost="True" ShowActivated="False"
         Left="-20000" Top="-20000" Width="10" Height="10"
         Background="{DynamicResource BarBg}" Foreground="{DynamicResource BarFg}"
-        FontFamily="{StaticResource UiFont}" FontSize="13">
+        FontFamily="{StaticResource UiFont}" FontSize="13" TextOptions.TextHintingMode="Animated">
     <Window.Resources>
         <local:TrayIconTint x:Key="TrayIconTint"/>
         <Style x:Key="BarButton" TargetType="Button">

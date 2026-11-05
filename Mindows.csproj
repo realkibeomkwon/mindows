@@ -36,6 +36,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Resource Include="Fonts\*.otf" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="ManagedShell" Version="0.0.374" />
     <!-- ManagedShell's full-screen check loads System.Windows.Forms; a self-contained publish ships only the WPF part otherwise. -->
     <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />

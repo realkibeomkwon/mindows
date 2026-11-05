@@ -4,7 +4,7 @@
         Title="Mindows Dock" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" ShowInTaskbar="False" Topmost="True" ShowActivated="False"
         Left="-20000" Top="-20000" Width="10" Height="10"
-        FontFamily="{StaticResource UiFont}">
+        FontFamily="{StaticResource UiFont}" TextOptions.TextHintingMode="Animated">
     <Grid>
         <!-- Items are positioned by hand in Layout(); transparent pixels click through to the desktop. -->
         <Canvas x:Name="Root">

@@ -5,7 +5,7 @@
         Title="Mindows 설정" Width="820" Height="480" MinWidth="560" MinHeight="320"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource WindowBg}" Foreground="{DynamicResource MenuFg}"
-        FontFamily="{StaticResource UiFont}" FontSize="13">
+        FontFamily="{StaticResource UiFont}" FontSize="13" TextOptions.TextHintingMode="Animated">
     <Window.Resources>
         <!-- Sidebar entry: Tag holds a Segoe Fluent Icons glyph. -->
         <Style TargetType="TabItem">
