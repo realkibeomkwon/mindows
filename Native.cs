@@ -27,6 +27,12 @@ public struct SYSTEM_POWER_STATUS
     public int BatteryLifeTime, BatteryFullLifeTime;
 }
 
+[StructLayout(LayoutKind.Sequential)]
+public struct LASTINPUTINFO
+{
+    public uint cbSize, dwTime;
+}
+
 static class Native
 {
     public const int GWL_EXSTYLE = -20;
@@ -76,6 +82,7 @@ static class Native
     [DllImport("user32.dll")] public static extern int GetDoubleClickTime();
     [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vk);
     [DllImport("user32.dll")] public static extern IntPtr GetKeyboardLayout(uint thread);
+    [DllImport("user32.dll")] public static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
     [DllImport("imm32.dll")] public static extern IntPtr ImmGetDefaultIMEWnd(IntPtr h);
     [DllImport("user32.dll")] public static extern IntPtr SendMessageTimeout(IntPtr h, uint msg, IntPtr w, IntPtr l, uint flags, uint timeout, out IntPtr result);
     [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(long point);

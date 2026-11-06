@@ -132,10 +132,18 @@ public partial class DockWindow : Window
         ApplyAutoHide();
         SizeChanged += (_, _) => Layout();
         Loaded += (_, _) => Refresh();
-        IconLoader.Arrived += Refresh; // icons fill in as they load, in the order Refresh keeps
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        timer.Tick += (_, _) => Refresh();
-        timer.Start();
+        IconLoader.Arrived += QueueRefresh; // icons fill in as they load, in the order Refresh keeps
+        // MenuBarWindow's timer calls Refresh every second.
+    }
+
+    bool refreshQueued;
+
+    // At startup many icons arrive back to back; one Refresh covers them all.
+    void QueueRefresh()
+    {
+        if (refreshQueued) return;
+        refreshQueued = true;
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, () => { refreshQueued = false; Refresh(); });
     }
 
     /// <summary>The taskbar's own Search icon, "Off" or "On", inset like an app icon; null if a Windows update moves it.</summary>
@@ -309,7 +317,7 @@ public partial class DockWindow : Window
         return s;
     }
 
-    void Refresh()
+    internal void Refresh()
     {
         if (dragged != null) return; // the drag owns the order until the drop
         var windows = WindowTracker.List();

@@ -35,6 +35,7 @@ static class WindowTracker
             if (IsAppWindow(h) && Resolve(h) is { } app) list.Add(new(h, app));
             return true;
         }, IntPtr.Zero);
+        foreach (var gone in resolved.Keys.Where(h => !IsWindow(h)).ToList()) resolved.Remove(gone);
         return list;
     }
 
@@ -43,11 +44,15 @@ static class WindowTracker
     {
         GetWindowThreadProcessId(h, out var pid);
         if (pid == OwnPid) return null;
+        // The pid check guards against a recycled handle.
+        if (resolved.TryGetValue(h, out var hit) && hit.Pid == pid) return hit.App;
         var (exe, aumid) = QueryProcess(pid);
         if (exe == null) return null;
+        var cacheable = true;
         // UWP apps live in a child window of an ApplicationFrameHost frame.
         if (Path.GetFileName(exe).Equals("ApplicationFrameHost.exe", StringComparison.OrdinalIgnoreCase))
         {
+            cacheable = false; // its app child window appears later
             uint child = 0;
             EnumChildWindows(h, (c, _) =>
             {
@@ -66,15 +71,24 @@ static class WindowTracker
         }
         // Chrome's installed web apps run in the browser's process but tag their windows with the app ID of their
         // Start menu shortcut; plain browser windows carry a profile ID that no shortcut has, so they stay with chrome.exe.
-        if (aumid == null && Path.GetFileName(exe).Equals("chrome.exe", StringComparison.OrdinalIgnoreCase)
-            && WindowAumid(h) is { } webApp && webApp.Contains("._crx_"))
+        var chrome = aumid == null && Path.GetFileName(exe).Equals("chrome.exe", StringComparison.OrdinalIgnoreCase);
+        if (chrome && WindowAumid(h) is { } webApp && webApp.Contains("._crx_"))
         {
             var appKey = Config.AppsFolder + webApp;
             if (!names.TryGetValue(appKey, out var appName)) names[appKey] = appName = ShellItemName(appKey) ?? WindowText(h);
-            return new(appKey, exe, appName);
+            return Cache(h, pid, new(appKey, exe, appName), cacheable);
         }
         var key = aumid != null ? Config.AppsFolder + aumid : exe;
-        return new(key, exe, NameOf(key, exe));
+        // A plain Chrome window may still get its web app ID, so it is asked again.
+        return Cache(h, pid, new(key, exe, NameOf(key, exe)), cacheable && !chrome);
+    }
+
+    static readonly Dictionary<IntPtr, (uint Pid, AppInfo App)> resolved = new();
+
+    static AppInfo Cache(IntPtr h, uint pid, AppInfo app, bool cacheable)
+    {
+        if (cacheable) resolved[h] = (pid, app);
+        return app;
     }
 
     static string NameOf(string key, string exe)

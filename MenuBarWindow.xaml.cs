@@ -49,6 +49,7 @@ public partial class MenuBarWindow : Window
     int? parkedY;  // the shell's own y for a flyout parked above the screen until its panel is found
     long parkedAt;
     IntPtr search; // Search's window, kept above the dock while closed
+    long searchRetryAt; // when ReadySearch may capture Search again after a failed capture
 
     static MenuBarWindow()
     {
@@ -65,7 +66,10 @@ public partial class MenuBarWindow : Window
         _ = new AppBar(this, AppBar.Top, () => BarHeight, () => BarHeight);
         UpdateForeground();
         // A wallpaper change (a slideshow too) is announced as a desktop preference change.
-        Microsoft.Win32.SystemEvents.UserPreferenceChanged += (_, _) => Dispatcher.BeginInvoke(UpdateForeground);
+        Microsoft.Win32.SystemEvents.UserPreferenceChanged += (_, e) =>
+        {
+            if (e.Category == Microsoft.Win32.UserPreferenceCategory.Desktop) Dispatcher.BeginInvoke(UpdateForeground);
+        };
         if (tray != null)
         {
             trayView = TrayView(tray, config);
@@ -79,8 +83,9 @@ public partial class MenuBarWindow : Window
         OnForeground(GetForegroundWindow());
         // Catch flyouts as they appear, before they take the foreground, so they don't show at the bottom first.
         shownHook = (_, _, h, idObject, _, _, _) => { if (idObject == 0) WatchFlyout(h); };
-        SetWinEventHook(0x8002, 0x8002, IntPtr.Zero, shownHook, 0, 0, 0); // EVENT_OBJECT_SHOW: Quick Settings
-        SetWinEventHook(0x8018, 0x8018, IntPtr.Zero, shownHook, 0, 0, 0); // EVENT_OBJECT_UNCLOAKED: Search
+        // WINEVENT_SKIPOWNPROCESS (2): our own windows are never flyouts.
+        SetWinEventHook(0x8002, 0x8002, IntPtr.Zero, shownHook, 0, 0, 2); // EVENT_OBJECT_SHOW: Quick Settings
+        SetWinEventHook(0x8018, 0x8018, IntPtr.Zero, shownHook, 0, 0, 2); // EVENT_OBJECT_UNCLOAKED: Search
         flyoutTimer.Tick += (_, _) => PlaceFlyout();
         NetworkChange.NetworkAddressChanged += (_, _) => networkChanged = true;
 
@@ -88,6 +93,7 @@ public partial class MenuBarWindow : Window
         timer.Tick += (_, _) =>
         {
             Tick();
+            if (dock.IsLoaded) dock.Refresh(); // one wake-up a second for both bars
             // Re-aim just past the next second boundary; a fixed 1s interval drifts and the clock skips a second.
             timer.Interval = TimeSpan.FromMilliseconds(1020 - DateTime.Now.Millisecond);
         };
@@ -104,6 +110,9 @@ public partial class MenuBarWindow : Window
     void UpdateIme()
     {
         var h = GetForegroundWindow();
+        // The mode changes only through input (or a new foreground window), so ask after input, not while idle.
+        var input = new LASTINPUTINFO { cbSize = 8 };
+        if (h == imeWindow && GetLastInputInfo(ref input) && (uint)Environment.TickCount - input.dwTime > 1000) return;
         var korean = ((long)GetKeyboardLayout(GetWindowThreadProcessId(h, out _)) & 0xFFFF) == 0x412;
         ImeButton.Visibility = korean ? Visibility.Visible : Visibility.Collapsed;
         if (!korean) return;
@@ -113,6 +122,7 @@ public partial class MenuBarWindow : Window
         var ime = ImmGetDefaultIMEWnd(h);
         var mode = IntPtr.Zero;
         if (ime != IntPtr.Zero && SendMessageTimeout(ime, 0x283, 1, IntPtr.Zero, 2, 20, out mode) == IntPtr.Zero) return;
+        imeWindow = h;
         var text = ((long)mode & 1) != 0 ? "한" : "A";
         if (text == imeText) return;
         imeText = text;
@@ -127,6 +137,7 @@ public partial class MenuBarWindow : Window
     }
 
     string? imeText; // the letter cut out of the IME badge
+    IntPtr imeWindow; // the foreground window whose mode was last read
 
     /// <summary>
     /// Explorer draws its network icon itself and never hands it to a tray host, so draw it here: ‹···› while a wired
@@ -221,7 +232,13 @@ public partial class MenuBarWindow : Window
         if (search == IntPtr.Zero || search == flyout || IsShown(search)) return;
         if (!flyoutEdges.TryGetValue(search, out var edge))
         {
-            if (PanelEdge(search) is not { } found) return; // a cloaked window still captures its last frame
+            // Each capture renders the window, so a Search that was never opened (no frame yet) is retried only every 30 s.
+            if (Environment.TickCount64 < searchRetryAt) return;
+            if (PanelEdge(search) is not { } found) // a cloaked window still captures its last frame
+            {
+                searchRetryAt = Environment.TickCount64 + 30_000;
+                return;
+            }
             flyoutEdges[search] = edge = found;
         }
         MoveFlyout(search, edge);
@@ -231,8 +248,9 @@ public partial class MenuBarWindow : Window
     {
         if (h == flyout) return;
         // Notification Center already starts under the menu bar, and its calendar can't be moved on its own.
-        if (IsSearch(h)) search = h;
-        else if (ClassName(h) != "ControlCenterWindow") return; // Quick Settings
+        var cls = ClassName(h);
+        if (cls == "Windows.UI.Core.CoreWindow" && IsSearch(h)) search = h;
+        else if (cls != "ControlCenterWindow") return; // Quick Settings
         flyout = h;
         // The shell reuses the window, so last time's panel edge moves it at once; capturing takes a few frames.
         if (flyoutEdges.TryGetValue(h, out var edge)) MoveFlyout(h, edge);

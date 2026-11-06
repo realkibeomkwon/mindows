@@ -9,6 +9,10 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <RootNamespace>Mindows</RootNamespace>
     <Version>1.0.0</Version>
+    <!-- No background GC thread for an app that is idle almost always. -->
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <!-- Precompiles Mindows.dll and ManagedShell at publish (needs the -r in the publish command). -->
+    <PublishReadyToRun>true</PublishReadyToRun>
   </PropertyGroup>
 
   <!-- dotnet publish ... -p:UiAccess=true: see README. Not tied to Release, since dotnet run -c Release runs from bin\ and a uiAccess exe only starts from Program Files. -->
