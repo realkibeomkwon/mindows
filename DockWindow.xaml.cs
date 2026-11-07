@@ -50,6 +50,7 @@ public partial class DockWindow : Window
 
     readonly Config config;
     readonly AppBar bar;
+    readonly ShelfBlur blur;
     readonly Slot separator, trash, search;
     // As on the taskbar: a plain Search icon, and a colored one while Search is open.
     readonly ImageSource? searchOff = SearchIcon("Off"), searchOn = SearchIcon("On");
@@ -90,6 +91,7 @@ public partial class DockWindow : Window
     {
         this.config = config;
         InitializeComponent();
+        blur = new ShelfBlur(this, Root);
         // Auto-hide reserves nothing, so maximized windows reach the bottom of the screen.
         bar = new AppBar(this, AppBar.Bottom, () => config.DockAutoHide ? 0 : BottomMargin + ShelfH + 3, () => WindowH);
 
@@ -269,7 +271,9 @@ public partial class DockWindow : Window
         {
             EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
         };
-        Root.RenderTransform.BeginAnimation(TranslateTransform.YProperty, slide);
+        var clock = slide.CreateClock();
+        clock.CurrentTimeInvalidated += (_, _) => blur.Apply(); // the blur window follows the sliding shelf
+        Root.RenderTransform.ApplyAnimationClock(TranslateTransform.YProperty, clock);
     }
 
     static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
@@ -414,6 +418,7 @@ public partial class DockWindow : Window
         var shelfTop = height - BottomMargin - ShelfH;
         Place(Shelf, left, shelfTop, total, ShelfH);
         Shelf.CornerRadius = new CornerRadius(Radius);
+        blur.Sync(left, shelfTop, total, ShelfH, Radius);
         var zoneTop = shelfTop - (Max - Base) - 4;
         Place(HoverZone, left, zoneTop, total, height - zoneTop);
 

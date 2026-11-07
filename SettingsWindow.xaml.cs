@@ -55,7 +55,7 @@ public partial class SettingsWindow : Window
     }
 
     // Absent means on, as in Windows itself.
-    static bool WindowsTransparency() =>
+    internal static bool WindowsTransparency() =>
         Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency", 1) is not 0;
 
     /// <summary>Acrylic behind a see-through sidebar while Windows' transparency effects are on; otherwise the opaque look.</summary>
