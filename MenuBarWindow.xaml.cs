@@ -434,7 +434,9 @@ public partial class MenuBarWindow : Window
         try { product = FileVersionInfo.GetVersionInfo(icon.Path).ProductName?.Trim(); }
         catch (Exception e) when (e is IOException or ArgumentException) { }
         if (!string.IsNullOrEmpty(product) && !product.StartsWith("Microsoft", StringComparison.OrdinalIgnoreCase)) return product;
-        return string.IsNullOrEmpty(icon.Title) ? Path.GetFileNameWithoutExtension(icon.Path) : icon.Title;
+        // A multi-line tooltip puts the program's name on the first line and details (an account) below it.
+        var title = icon.Title?.Split('\n')[0].Trim();
+        return string.IsNullOrEmpty(title) ? Path.GetFileNameWithoutExtension(icon.Path) : title;
     }
 
     /// <summary>
