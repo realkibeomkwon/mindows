@@ -425,9 +425,17 @@ public partial class MenuBarWindow : Window
         icon.IsEqualByIdentifier(saved) || (icon.GUID == Guid.Empty && saved.EndsWith($":{icon.UID}:{icon.Title}", StringComparison.OrdinalIgnoreCase));
 
     // The volume icon's title is a tooltip that changes with the output device and level, so it gets a fixed name.
-    internal static string IconName(NotifyIcon icon) =>
-        icon.GUID == new Guid(NotificationArea.VOLUME_GUID) ? "Volume"
-        : string.IsNullOrEmpty(icon.Title) ? Path.GetFileNameWithoutExtension(icon.Path) : icon.Title;
+    // Other titles are tooltips too (status text, account names), so the program's own product name is preferred;
+    // Windows-hosted icons report only "Microsoft Windows Operating System" there, so they keep the title.
+    internal static string IconName(NotifyIcon icon)
+    {
+        if (icon.GUID == new Guid(NotificationArea.VOLUME_GUID)) return "Volume";
+        string? product = null;
+        try { product = FileVersionInfo.GetVersionInfo(icon.Path).ProductName?.Trim(); }
+        catch (Exception e) when (e is IOException or ArgumentException) { }
+        if (!string.IsNullOrEmpty(product) && !product.StartsWith("Microsoft", StringComparison.OrdinalIgnoreCase)) return product;
+        return string.IsNullOrEmpty(icon.Title) ? Path.GetFileNameWithoutExtension(icon.Path) : icon.Title;
+    }
 
     /// <summary>
     /// A transparent bar shows the wallpaper through it, so its text turns white over a dark strip and black over a light one,
