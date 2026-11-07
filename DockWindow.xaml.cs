@@ -53,7 +53,8 @@ public partial class DockWindow : Window
     readonly ShelfBlur blur;
     readonly Slot separator, trash, search;
     // As on the taskbar: a plain Search icon, and a colored one while Search is open.
-    readonly ImageSource? searchOff = SearchIcon("Off"), searchOn = SearchIcon("On");
+    ImageSource? searchOff = SearchIcon("Off"), searchOn = SearchIcon("On");
+    bool searchIconsLight = App.LightTheme; // the theme the icons above were drawn for
     readonly DispatcherTimer searchTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
     IntPtr searchWindow;
     bool searchSeen;     // Search has shown since the icon was lit
@@ -110,6 +111,15 @@ public partial class DockWindow : Window
         search.Img!.RenderTransform = new ScaleTransform(); // Search never bounces; it shrinks and regrows instead
         search.Img.RenderTransformOrigin = new Point(0.5, 0.5);
         searchTimer.Tick += (_, _) => WatchSearch();
+        // Runs after App's own handler (registered first), so App.LightTheme is already current.
+        UpdateTagForeground();
+        Microsoft.Win32.UserPreferenceChangedEventHandler onPrefs = (_, e) => Dispatcher.BeginInvoke(() =>
+        {
+            ReloadSearchIcons();
+            if (e.Category == Microsoft.Win32.UserPreferenceCategory.Desktop) UpdateTagForeground(); // a wallpaper change
+        });
+        Microsoft.Win32.SystemEvents.UserPreferenceChanged += onPrefs;
+        Closed += (_, _) => Microsoft.Win32.SystemEvents.UserPreferenceChanged -= onPrefs;
 
         MouseMove += (_, e) =>
         {
@@ -161,6 +171,28 @@ public partial class DockWindow : Window
         var icon = new DrawingImage(drawing);
         icon.Freeze();
         return icon;
+    }
+
+    /// <summary>
+    /// The name tag floats over the wallpaper, so its text is white over a dark strip and black over a light one, like the menu bar's.
+    /// shortcut: samples the whole strip the dock window covers, not the spot under the tag; sample per tag if the wallpaper varies a lot there.
+    /// </summary>
+    void UpdateTagForeground()
+    {
+        if (SettingsWindow.Wallpaper() is not { } image)
+        {
+            Resources.Remove("BarFg"); // a solid color or a missing file has no strip to measure
+            return;
+        }
+        Resources["BarFg"] = SettingsWindow.TextOver(image, SystemParameters.PrimaryScreenHeight - WindowH, WindowH);
+    }
+
+    void ReloadSearchIcons()
+    {
+        if (searchIconsLight == App.LightTheme) return;
+        searchIconsLight = App.LightTheme;
+        (searchOff, searchOn) = (SearchIcon("Off"), SearchIcon("On"));
+        search.Img!.Source = searchTimer.IsEnabled ? searchOn : searchOff;
     }
 
     bool SearchShown()

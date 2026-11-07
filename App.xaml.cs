@@ -39,6 +39,12 @@ public partial class App : Application
         RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
         var config = Config.Load();
         ApplyTheme(config.MenuBarTransparent);
+        // Switching Windows' light/dark mode is announced as a general setting change.
+        SystemEvents.UserPreferenceChanged += (_, a) =>
+        {
+            if (a.Category == UserPreferenceCategory.General)
+                Dispatcher.BeginInvoke(() => { if (ReadLightTheme() != LightTheme) ApplyTheme(config.MenuBarTransparent); });
+        };
         Taskbar.WaitForExplorer();
         // Hide first: the tray host takes over the Shell_TrayWnd class, and the state file must hold Explorer's state.
         Taskbar.Hide();
@@ -111,15 +117,17 @@ public partial class App : Application
         Current.Resources["BarBg"] = brush;
     }
 
+    static bool ReadLightTheme() => Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+        "SystemUsesLightTheme", 0) is 1;
+
     void ApplyTheme(bool barTransparent)
     {
-        LightTheme = Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
-            "SystemUsesLightTheme", 0) is 1;
+        LightTheme = ReadLightTheme();
         // WindowBg is opaque: normal (non-layered) windows draw translucent backgrounds over black.
         var colors = LightTheme
-            ? new[] { "#B8F4F4F4", "#FF1C1C1C", "#F2F6F6F6", "#FF1C1C1C", "#22000000", "#1F000000", "#1FFFFFFF", "#40FFFFFF", "#FFFFFFFF", "#FFF1EFEE", "#FFF7F7F7" }
-            : new[] { "#8C1E1E1E", "#FFF5F5F5", "#F22B2B2B", "#FFF0F0F0", "#33FFFFFF", "#33FFFFFF", "#1FFFFFFF", "#40FFFFFF", "#FF242424", "#33FFFFFF", "#33FFFFFF" };
-        string[] keys = { "BarBg", "BarFg", "MenuBg", "MenuFg", "MenuBorder", "Hover", "DockBg", "DockBorder", "WindowBg", "PaneBg", "CardBg" };
+            ? new[] { "#B8F4F4F4", "#FF1C1C1C", "#F2F6F6F6", "#FF1C1C1C", "#22000000", "#1F000000", "#1FFFFFFF", "#40FFFFFF", "#FFFFFFFF", "#FFF1EFEE", "#FFF7F7F7", "#FF007AFF" }
+            : new[] { "#8C1E1E1E", "#FFF5F5F5", "#F22B2B2B", "#FFF0F0F0", "#FF3D4040", "#33FFFFFF", "#1F000000", "#40FFFFFF", "#FF222528", "#FF121617", "#FF292C2E", "#FF0A84FF" };
+        string[] keys = { "BarBg", "BarFg", "MenuBg", "MenuFg", "MenuBorder", "Hover", "DockBg", "DockBorder", "WindowBg", "PaneBg", "CardBg", "Accent" };
         for (var i = 0; i < keys.Length; i++)
         {
             var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(colors[i]));

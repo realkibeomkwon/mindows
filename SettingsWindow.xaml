@@ -29,7 +29,7 @@
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Hover}"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource Accent}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Accent}"/>
                                 <Setter TargetName="Hdr" Property="TextElement.Foreground" Value="White"/>
                                 <Setter TargetName="Hdr" Property="TextElement.FontWeight" Value="SemiBold"/>
                             </Trigger>
@@ -73,7 +73,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Track" Property="Background" Value="{StaticResource Accent}"/>
+                                <Setter TargetName="Track" Property="Background" Value="{DynamicResource Accent}"/>
                                 <Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -95,7 +95,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -127,7 +127,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -154,7 +154,7 @@
                                         <RepeatButton.Template>
                                             <ControlTemplate TargetType="RepeatButton">
                                                 <Grid Background="Transparent">
-                                                    <Border Height="4" CornerRadius="2" Background="{StaticResource Accent}"/>
+                                                    <Border Height="4" CornerRadius="2" Background="{DynamicResource Accent}"/>
                                                 </Grid>
                                             </ControlTemplate>
                                         </RepeatButton.Template>
@@ -205,7 +205,7 @@
                     <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Background="{DynamicResource WindowBg}">
                         <StackPanel Margin="24,20,24,8">
                             <TextBlock Text="{Binding SelectedItem.Header, RelativeSource={RelativeSource TemplatedParent}}"
-                                       FontSize="17" FontWeight="SemiBold" Margin="2,0,0,18"/>
+                                       FontSize="17" FontWeight="SemiBold" Margin="2,0,0,18" Foreground="{DynamicResource MenuFg}"/>
                             <ContentPresenter ContentSource="SelectedContent"/>
                         </StackPanel>
                     </ScrollViewer>
@@ -221,7 +221,13 @@
                                   AutomationProperties.Name="로그인 시 자동 실행" Click="LaunchAtLogin_Click"/>
                         <TextBlock Text="로그인 시 자동 실행" VerticalAlignment="Center"/>
                     </DockPanel>
-                    <Border Style="{StaticResource RowLine}"/>
+                </StackPanel>
+            </Border>
+        </TabItem>
+
+        <TabItem Header="외관" Tag="&#xE790;" Background="#32ADE6">
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
                     <DockPanel Style="{StaticResource Row}">
                         <CheckBox x:Name="Translucency" DockPanel.Dock="Right" Style="{StaticResource Switch}"
                                   AutomationProperties.Name="창 투명 효과" Click="Translucency_Click"/>

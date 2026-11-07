@@ -44,8 +44,6 @@ public partial class SettingsWindow : Window
         Closed += (_, _) => open = null;
         SourceInitialized += (_, _) =>
         {
-            var dark = App.LightTheme ? 0 : 1;
-            DwmSetWindowAttribute(new WindowInteropHelper(this).Handle, 20, ref dark, sizeof(int)); // DWMWA_USE_IMMERSIVE_DARK_MODE
             ApplyBackdrop();
         };
         // Windows broadcasts a setting change when its transparency effects are switched.
@@ -63,6 +61,8 @@ public partial class SettingsWindow : Window
     {
         var on = WindowsTransparency();
         var handle = new WindowInteropHelper(this).Handle;
+        var dark = App.LightTheme ? 0 : 1;
+        DwmSetWindowAttribute(handle, 20, ref dark, sizeof(int)); // DWMWA_USE_IMMERSIVE_DARK_MODE
         if (HwndSource.FromHwnd(handle)?.CompositionTarget is { } target)
             target.BackgroundColor = on ? System.Windows.Media.Colors.Transparent : System.Windows.SystemColors.WindowColor;
         var margins = new Margins { Left = on ? -1 : 0, Right = on ? -1 : 0, Top = on ? -1 : 0, Bottom = on ? -1 : 0 };
@@ -72,7 +72,7 @@ public partial class SettingsWindow : Window
         if (on)
         {
             Background = System.Windows.Media.Brushes.Transparent;
-            var tint = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(App.LightTheme ? "#F2F6F6F6" : "#66202020"));
+            var tint = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(App.LightTheme ? "#F2F6F6F6" : "#66121617"));
             tint.Freeze();
             Resources["PaneBg"] = tint;
         }
@@ -222,6 +222,20 @@ public partial class SettingsWindow : Window
         {
             return null;
         }
+    }
+
+    /// <summary>White over a dark strip of the wallpaper and black over a light one; the strip is given in screen DIPs, as if the picture were stretched to the screen.</summary>
+    internal static System.Windows.Media.Brush TextOver(BitmapImage image, double top, double height)
+    {
+        var scale = image.PixelHeight / SystemParameters.PrimaryScreenHeight;
+        var first = Math.Clamp((int)Math.Round(top * scale), 0, image.PixelHeight - 1);
+        var rows = Math.Clamp((int)Math.Round(height * scale), 1, image.PixelHeight - first);
+        var pixels = new FormatConvertedBitmap(image, System.Windows.Media.PixelFormats.Bgra32, null, 0);
+        var bgra = new byte[pixels.PixelWidth * 4 * rows];
+        pixels.CopyPixels(new Int32Rect(0, first, pixels.PixelWidth, rows), bgra, pixels.PixelWidth * 4, 0);
+        double sum = 0;
+        for (var i = 0; i < bgra.Length; i += 4) sum += 0.0722 * bgra[i] + 0.7152 * bgra[i + 1] + 0.2126 * bgra[i + 2];
+        return sum / (bgra.Length / 4) < 128 ? System.Windows.Media.Brushes.White : System.Windows.Media.Brushes.Black;
     }
 
     // While the thumb is dragged the dock resizes live; the drop (or a click or key press) re-reserves the strip and saves.

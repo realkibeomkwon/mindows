@@ -4,7 +4,6 @@
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
         <!-- Theme brushes (BarBg, BarFg, MenuBg, ...) are set in App.ApplyTheme. -->
-        <SolidColorBrush x:Key="Accent" Color="#2F6FE4"/>
         <!-- Pretendard is close to the macOS system font. It is embedded (Fonts\, SIL OFL) so it does not depend on being installed; Windows' own UI font follows. -->
         <FontFamily x:Key="UiFont">pack://application:,,,/Fonts/#Pretendard, Segoe UI Variable Text, Segoe UI</FontFamily>
 
@@ -59,7 +58,7 @@
                                     <Condition Property="IsHighlighted" Value="True"/>
                                     <Condition Property="IsEnabled" Value="True"/>
                                 </MultiTrigger.Conditions>
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource Accent}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Accent}"/>
                                 <Setter Property="Foreground" Value="White"/>
                             </MultiTrigger>
                             <Trigger Property="IsChecked" Value="True">

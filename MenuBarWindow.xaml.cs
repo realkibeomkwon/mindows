@@ -449,14 +449,7 @@ public partial class MenuBarWindow : Window
             Resources.Remove("BarFg"); // a solid color or a missing file has no strip to measure
             return;
         }
-        var rows = Math.Max(1, (int)Math.Round(image.PixelHeight * BarHeight / SystemParameters.PrimaryScreenHeight));
-        var pixels = new System.Windows.Media.Imaging.FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
-        var bgra = new byte[pixels.PixelWidth * 4 * rows];
-        pixels.CopyPixels(new Int32Rect(0, 0, pixels.PixelWidth, rows), bgra, pixels.PixelWidth * 4, 0);
-        double sum = 0;
-        for (var i = 0; i < bgra.Length; i += 4) sum += 0.0722 * bgra[i] + 0.7152 * bgra[i + 1] + 0.2126 * bgra[i + 2];
-        var brush = sum / (bgra.Length / 4) < 128 ? Brushes.White : Brushes.Black;
-        Resources["BarFg"] = brush;
+        Resources["BarFg"] = SettingsWindow.TextOver(image, 0, BarHeight);
     }
 
     /// <summary>Called after the settings change which tray icons are shown.</summary>
