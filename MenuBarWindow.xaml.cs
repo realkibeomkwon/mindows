@@ -420,6 +420,10 @@ public partial class MenuBarWindow : Window
         !icon.IsHidden && icon.GUID != new Guid(NotificationArea.POWER_GUID)
         && !string.Equals(Path.GetFileName(icon.Path), "UsageBar.exe", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Matches a saved identifier to an icon. Some apps report a different path on every launch, so the UID and title alone also match.</summary>
+    internal static bool SavedAs(NotifyIcon icon, string saved) =>
+        icon.IsEqualByIdentifier(saved) || (icon.GUID == Guid.Empty && saved.EndsWith($":{icon.UID}:{icon.Title}", StringComparison.OrdinalIgnoreCase));
+
     // The volume icon's title is a tooltip that changes with the output device and level, so it gets a fixed name.
     internal static string IconName(NotifyIcon icon) =>
         icon.GUID == new Guid(NotificationArea.VOLUME_GUID) ? "Volume"
@@ -509,7 +513,7 @@ public partial class MenuBarWindow : Window
     {
         var view = new ListCollectionView(tray.TrayIcons)
         {
-            Filter = o => o is NotifyIcon icon && Listed(icon) && !config.HiddenTrayIcons.Any(icon.IsEqualByIdentifier),
+            Filter = o => o is NotifyIcon icon && Listed(icon) && !config.HiddenTrayIcons.Any(h => SavedAs(icon, h)),
             IsLiveFiltering = true,
             IsLiveSorting = true,
         };

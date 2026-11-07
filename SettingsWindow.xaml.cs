@@ -116,12 +116,12 @@ public partial class SettingsWindow : Window
             var toggle = new CheckBox
             {
                 Style = (Style)FindResource("Switch"),
-                IsChecked = !config.HiddenTrayIcons.Any(icon.IsEqualByIdentifier),
+                IsChecked = !config.HiddenTrayIcons.Any(h => MenuBarWindow.SavedAs(icon, h)),
             };
             System.Windows.Automation.AutomationProperties.SetName(toggle, name);
             toggle.Click += (_, _) =>
             {
-                var rest = config.HiddenTrayIcons.Where(h => !icon.IsEqualByIdentifier(h));
+                var rest = config.HiddenTrayIcons.Where(h => !MenuBarWindow.SavedAs(icon, h));
                 config.HiddenTrayIcons = (toggle.IsChecked == true ? rest : rest.Append(icon.Identifier)).ToArray();
                 config.Save();
                 bar.ApplyTray();
