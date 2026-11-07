@@ -299,7 +299,7 @@ public partial class DockWindow : Window
         s.Img.MouseRightButtonUp += (_, e) => { ShowMenu(s); e.Handled = true; };
         s.Img.MouseEnter += (_, _) => { hovered = s; Layout(); };
         s.Img.MouseLeave += (_, _) => { if (hovered == s) hovered = null; Layout(); };
-        s.Dot = new Ellipse { Width = 4, Height = 4, Visibility = Visibility.Hidden };
+        s.Dot = new Ellipse { Visibility = Visibility.Hidden };
         s.Dot.SetResourceReference(Shape.FillProperty, "MenuFg");
         Root.Children.Add(s.Img);
         Root.Children.Add(s.Dot);
@@ -418,6 +418,8 @@ public partial class DockWindow : Window
         var shelfTop = height - BottomMargin - ShelfH;
         Place(Shelf, left, shelfTop, total, ShelfH);
         Shelf.CornerRadius = new CornerRadius(Radius);
+        Place(ShelfEdge, left - 1, shelfTop - 1, total + 2, ShelfH + 2);
+        ShelfEdge.CornerRadius = new CornerRadius(Radius + 1);
         blur.Sync(left, shelfTop, total, ShelfH, Radius);
         var zoneTop = shelfTop - (Max - Base) - 4;
         Place(HoverZone, left, zoneTop, total, height - zoneTop);
@@ -431,8 +433,12 @@ public partial class DockWindow : Window
             {
                 var gap = (SlotWidth(s) - s.Size) / 2;
                 Place(s.Img!, sx + gap, height - BottomMargin - Inset - s.Size + s.ShiftY, s.Size, s.Size);
-                Canvas.SetLeft(s.Dot!, sx + gap + s.Size / 2 - 2);
-                Canvas.SetTop(s.Dot!, height - BottomMargin - 6);
+                // Diameter measured from a macOS dock, snapped to whole device pixels so the dot stays crisp at fractional DPI scales.
+                var scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+                var dot = Math.Max(1, Math.Round(Base * 3.3 / 52 * scale)) / scale;
+                s.Dot!.Width = s.Dot.Height = dot;
+                Canvas.SetLeft(s.Dot, Math.Round((sx + gap + s.Size / 2 - dot / 2) * scale) / scale);
+                Canvas.SetTop(s.Dot, Math.Round((height - BottomMargin - 6 - dot / 2) * scale) / scale); // centre 6 DIP above the shelf's bottom edge
             }
             x += SlotWidth(s);
         }

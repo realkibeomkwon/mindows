@@ -127,7 +127,7 @@ public partial class App : Application
             Resources[keys[i]] = brush;
         }
         // macOS lights the dock's rim from above: bright along the top edge, fading toward the bottom.
-        var rim = new LinearGradientBrush((Color)ColorConverter.ConvertFromString("#66FFFFFF"), (Color)ColorConverter.ConvertFromString("#1AFFFFFF"), 90);
+        var rim = new LinearGradientBrush((Color)ColorConverter.ConvertFromString("#66FFFFFF"), (Color)ColorConverter.ConvertFromString("#1FFFFFFF"), 90);
         rim.Freeze();
         Resources["DockBorder"] = rim;
         ApplyBarBackground(barTransparent);
