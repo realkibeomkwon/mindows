@@ -39,12 +39,9 @@ public partial class App : Application
         RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
         var config = Config.Load();
         ApplyTheme(config.MenuBarTransparent);
-        // Switching Windows' light/dark mode is announced as a general setting change.
-        SystemEvents.UserPreferenceChanged += (_, a) =>
-        {
-            if (a.Category == UserPreferenceCategory.General)
-                Dispatcher.BeginInvoke(() => { if (ReadLightTheme() != LightTheme) ApplyTheme(config.MenuBarTransparent); });
-        };
+        // Which category Windows reports a light/dark switch under is not documented, so every change re-reads the value.
+        SystemEvents.UserPreferenceChanged += (_, _) =>
+            Dispatcher.BeginInvoke(() => { if (ReadLightTheme() != LightTheme) ApplyTheme(config.MenuBarTransparent); });
         Taskbar.WaitForExplorer();
         // Hide first: the tray host takes over the Shell_TrayWnd class, and the state file must hold Explorer's state.
         Taskbar.Hide();

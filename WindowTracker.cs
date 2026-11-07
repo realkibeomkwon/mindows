@@ -13,6 +13,8 @@ static class WindowTracker
 {
     static readonly uint OwnPid = (uint)Environment.ProcessId;
     static readonly string[] ShellClasses = { "Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd" };
+    // Search and Start are flyouts, not apps: the dock has its own Search icon and the shell opens Start.
+    static readonly HashSet<string> ShellFlyouts = new(StringComparer.OrdinalIgnoreCase) { "SearchHost.exe", "StartMenuExperienceHost.exe" };
     static readonly Dictionary<string, string> names = new(StringComparer.OrdinalIgnoreCase);
 
     public static bool IsAppWindow(IntPtr h)
@@ -39,7 +41,7 @@ static class WindowTracker
         return list;
     }
 
-    /// <summary>The app owning a window; null for Mindows' own windows or inaccessible processes.</summary>
+    /// <summary>The app owning a window; null for Mindows' own windows, shell flyouts, or inaccessible processes.</summary>
     public static AppInfo? Resolve(IntPtr h)
     {
         GetWindowThreadProcessId(h, out var pid);
@@ -47,7 +49,7 @@ static class WindowTracker
         // The pid check guards against a recycled handle.
         if (resolved.TryGetValue(h, out var hit) && hit.Pid == pid) return hit.App;
         var (exe, aumid) = QueryProcess(pid);
-        if (exe == null) return null;
+        if (exe == null || ShellFlyouts.Contains(Path.GetFileName(exe))) return null;
         var cacheable = true;
         // UWP apps live in a child window of an ApplicationFrameHost frame.
         if (Path.GetFileName(exe).Equals("ApplicationFrameHost.exe", StringComparison.OrdinalIgnoreCase))
