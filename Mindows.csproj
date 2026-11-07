@@ -7,6 +7,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Mindows.ico</ApplicationIcon>
     <RootNamespace>Mindows</RootNamespace>
     <Version>1.0.0</Version>
     <!-- No background GC thread for an app that is idle almost always. -->
