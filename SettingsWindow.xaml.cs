@@ -72,7 +72,7 @@ public partial class SettingsWindow : Window
         if (on)
         {
             Background = System.Windows.Media.Brushes.Transparent;
-            var tint = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(App.LightTheme ? "#66F1EFEE" : "#66202020"));
+            var tint = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(App.LightTheme ? "#F2F6F6F6" : "#66202020"));
             tint.Freeze();
             Resources["PaneBg"] = tint;
         }

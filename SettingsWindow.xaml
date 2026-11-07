@@ -15,10 +15,11 @@
                     <ControlTemplate TargetType="TabItem">
                         <Border x:Name="Bd" Background="Transparent" CornerRadius="10" Padding="8,6" Margin="0,1">
                             <StackPanel Orientation="Horizontal">
-                                <Border Width="26" Height="26" CornerRadius="7" Background="#636366" Margin="0,0,10,0">
-                                    <TextBlock Text="{TemplateBinding Tag}" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                               FontSize="14" Foreground="White"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Border Width="26" Height="26" CornerRadius="7" Background="{TemplateBinding Background}" Margin="0,0,10,0">
+                                    <ContentPresenter Content="{TemplateBinding Tag}"
+                                                      TextElement.FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                                      TextElement.FontSize="14" TextElement.Foreground="White"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <ContentPresenter x:Name="Hdr" ContentSource="Header" VerticalAlignment="Center"/>
                             </StackPanel>
@@ -212,7 +213,7 @@
             </ControlTemplate>
         </TabControl.Template>
 
-        <TabItem Header="일반" Tag="&#xE713;">
+        <TabItem Header="일반" Tag="&#xE713;" Background="#8E8E93">
             <Border Style="{StaticResource Card}">
                 <StackPanel>
                     <DockPanel Style="{StaticResource Row}">
@@ -236,7 +237,15 @@
             </Border>
         </TabItem>
 
-        <TabItem Header="Dock" Tag="&#xE8A9;">
+        <TabItem Header="Dock" Background="#5E5CE6">
+            <!-- The macOS Desktop & Dock glyph: a screen outline with the dock bar along its bottom. -->
+            <TabItem.Tag>
+                <Grid Width="15" Height="12">
+                    <Border BorderBrush="White" BorderThickness="1.5" CornerRadius="3"/>
+                    <Border Width="9" Height="2.5" CornerRadius="1.25" Background="White"
+                            VerticalAlignment="Bottom" Margin="0,0,0,2.5"/>
+                </Grid>
+            </TabItem.Tag>
             <StackPanel>
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
@@ -290,7 +299,7 @@
             </StackPanel>
         </TabItem>
 
-        <TabItem Header="트레이 아이콘" Tag="&#xE8FD;">
+        <TabItem Header="트레이 아이콘" Tag="&#xE8A9;" Background="#FF9500">
             <StackPanel>
                 <Border Style="{StaticResource Card}">
                     <DockPanel Style="{StaticResource Row}">
@@ -310,7 +319,7 @@
             </StackPanel>
         </TabItem>
 
-        <TabItem Header="핫 코너" Tag="&#xE740;">
+        <TabItem Header="핫 코너" Tag="&#xE740;" Background="#34C759">
             <Border Style="{StaticResource Card}">
                 <Grid Margin="0,14">
                     <Grid.RowDefinitions>
