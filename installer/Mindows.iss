@@ -20,6 +20,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 ; PrepareToInstall stops Mindows itself; Restart Manager would only prompt.
 CloseApplications=no
 UninstallDisplayIcon={app}\{#AppExe}
+SetupIconFile=..\Mindows.ico
 OutputBaseFilename=MindowsSetup-{#AppVersion}
 Compression=lzma2
 SolidCompression=yes
