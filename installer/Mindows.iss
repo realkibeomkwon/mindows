@@ -33,6 +33,8 @@ Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
 Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; Pretendard is embedded in Mindows.exe; its SIL OFL text travels with it.
 Source: "..\Fonts\LICENSE.txt"; DestDir: "{app}\licenses"; DestName: "Pretendard-LICENSE.txt"; Flags: ignoreversion
+; Public part only. uiAccess refuses to start unless the signing certificate is in the machine's trusted roots.
+Source: "MindowsSigning.cer"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
 Name: "{autoprograms}\Mindows"; Filename: "{app}\{#AppExe}"
@@ -40,6 +42,8 @@ Name: "{autoprograms}\Mindows"; Filename: "{app}\{#AppExe}"
 Name: "{autoprograms}\Mindows 작업 표시줄 복원"; Filename: "{app}\{#AppExe}"; Parameters: "--restore"
 
 [Run]
+; Must precede the launch below: the signed exe fails to start until the certificate is trusted.
+Filename: "{sys}\certutil.exe"; Parameters: "-addstore -f Root ""{tmp}\MindowsSigning.cer"""; Flags: runhidden waituntilterminated
 Filename: "{app}\{#AppExe}"; Description: "Mindows 실행"; Flags: postinstall nowait skipifsilent shellexec runasoriginaluser
 
 [UninstallRun]
