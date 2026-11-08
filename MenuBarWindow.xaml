@@ -28,6 +28,15 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- Tile gradients are relative to each tile, so the same brush fits all of them. -->
+        <LinearGradientBrush x:Key="LogoBlue" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#65D0FE" Offset="0"/>
+            <GradientStop Color="#2090F1" Offset="1"/>
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="LogoWhite" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#FDFDFE" Offset="0"/>
+            <GradientStop Color="#E2EAF2" Offset="1"/>
+        </LinearGradientBrush>
         <Style x:Key="Glyph" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets"/>
             <Setter Property="FontSize" Value="14"/>
@@ -38,17 +47,23 @@
         <!-- As on macOS, the menu titles sit closer together than the status items on the right. -->
         <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Margin="9,0,0,0">
             <Button x:Name="LogoButton" Style="{StaticResource BarButton}" Padding="8,0" Click="Logo_Click">
-                <!-- The taskbar's Start logo (Icons\WindowsLogo.svg in the shell's Client.Core package). -->
-                <Path Width="13" Height="13" Stretch="Uniform"
-                      Data="M5.5,11.5 H0.5 C0.2239,11.5 0,11.2761 0,11 V6 H5.5 Z M11.5,11 C11.5,11.2761 11.2761,11.5 11,11.5 H6 V6 H11.5 Z
-                            M5.5,5.5 H0 V0.5 C0,0.2239 0.2239,0 0.5,0 H5.5 Z M11,0 C11.2761,0 11.5,0.2239 11.5,0.5 V5.5 H6 V0 Z">
-                    <Path.Fill>
-                        <LinearGradientBrush StartPoint="0.1515,0" EndPoint="0.803,1">
-                            <GradientStop Color="#4DD2FF" Offset="0"/>
-                            <GradientStop Color="#0078D4" Offset="0.75"/>
-                        </LinearGradientBrush>
-                    </Path.Fill>
-                </Path>
+                <!-- Mindows.ico redrawn as vectors so it stays sharp at any scale (256-unit grid of the icon's largest frame). -->
+                <Viewbox Width="18" Height="18">
+                    <Canvas Width="256" Height="256">
+                        <Rectangle Canvas.Left="5" Canvas.Top="5" Width="246" Height="246" RadiusX="64" RadiusY="64">
+                            <Rectangle.Fill>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <GradientStop Color="#29384F" Offset="0"/>
+                                    <GradientStop Color="#151D2D" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Rectangle.Fill>
+                        </Rectangle>
+                        <Rectangle Canvas.Left="46" Canvas.Top="46" Width="77" Height="77" RadiusX="24" RadiusY="24" Fill="{StaticResource LogoBlue}"/>
+                        <Rectangle Canvas.Left="46" Canvas.Top="133" Width="77" Height="77" RadiusX="24" RadiusY="24" Fill="{StaticResource LogoBlue}"/>
+                        <Rectangle Canvas.Left="133" Canvas.Top="46" Width="77" Height="77" RadiusX="24" RadiusY="24" Fill="{StaticResource LogoWhite}"/>
+                        <Rectangle Canvas.Left="133" Canvas.Top="133" Width="77" Height="77" RadiusX="24" RadiusY="24" Fill="{StaticResource LogoWhite}"/>
+                    </Canvas>
+                </Viewbox>
             </Button>
             <Button x:Name="AppButton" Style="{StaticResource BarButton}" Padding="8,0" Click="App_Click">
                 <TextBlock x:Name="AppName" FontWeight="Bold" Text="Mindows"/>
