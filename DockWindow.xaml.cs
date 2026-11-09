@@ -44,6 +44,8 @@ public partial class DockWindow : Window
         public bool Returning;        // easing back from a collapsed slot; magnification must not snap it
         public Image? Img;
         public Ellipse? Dot;
+        public Border? Badge;
+        public int Count;             // unread count: 0 hides the badge, -1 shows it as a plain dot
         public Rectangle? Line;
     }
 
@@ -72,6 +74,7 @@ public partial class DockWindow : Window
     int homeIndex;
     bool removing;               // a pinned icon dragged off the dock: drop removes it, its gap closes
     double leftShift;
+    readonly Dictionary<string, double> inkDrops = new(); // badge text -> InkDrop, which only depends on the text
     bool animating;
     bool hidden;                 // auto-hide has slid the dock below the screen edge
     readonly DispatcherTimer hideTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
@@ -327,8 +330,15 @@ public partial class DockWindow : Window
         s.Img.MouseLeave += (_, _) => { if (hovered == s) hovered = null; Layout(); };
         s.Dot = new Ellipse { Visibility = Visibility.Hidden };
         s.Dot.SetResourceReference(Shape.FillProperty, "MenuFg");
+        s.Badge = new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(0xFF, 0x3B, 0x30)), Visibility = Visibility.Collapsed, IsHitTestVisible = false,
+            Child = new TextBlock { Foreground = Brushes.White, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
+        };
+        Panel.SetZIndex(s.Badge, 50);
         Root.Children.Add(s.Img);
         Root.Children.Add(s.Dot);
+        Root.Children.Add(s.Badge);
         return s;
     }
 
@@ -346,6 +356,8 @@ public partial class DockWindow : Window
         (s.Name, s.Pinned) = (name, pinned);
         return s;
     }
+
+    static readonly System.Text.RegularExpressions.Regex TitleCount = new(@"^\((\d+)\)");
 
     internal void Refresh()
     {
@@ -370,14 +382,25 @@ public partial class DockWindow : Window
         {
             Root.Children.Remove(gone.Img);
             Root.Children.Remove(gone.Dot);
+            Root.Children.Remove(gone.Badge);
             if (gone == hovered) hovered = null;
         }
         var changed = !slots.SequenceEqual(wanted);
         slots = wanted;
+        var notified = NotificationBadges.Read();
         foreach (var s in slots.Where(s => !s.Separator && !s.Trash))
         {
             s.Windows = windows.Where(w => Same(w.App.Key, s.Key)).Select(w => w.Hwnd).ToList();
             s.Dot!.Visibility = s.Windows.Count > 0 ? Visibility.Visible : Visibility.Hidden;
+            // Windows' notification database first; apps it has no row for fall back to the "(3) Inbox" title convention (Gmail, Slack, Discord...).
+            var count = notified.TryGetValue(s.Key, out var known) ? known
+                : s.Windows.Sum(h => TitleCount.Match(WindowText(h)) is { Success: true } m && int.TryParse(m.Groups[1].Value, out var n) ? n : 0);
+            if (count != s.Count)
+            {
+                s.Count = count;
+                ((TextBlock)s.Badge!.Child).Text = count < 0 ? "" : count > 99 ? "99+" : count.ToString(); // -1: a glyph badge, a plain dot
+                changed = true; // sizes and places the badge in Layout
+            }
         }
         if (changed) Retarget();
     }
@@ -499,6 +522,17 @@ public partial class DockWindow : Window
                 s.Dot!.Width = s.Dot.Height = dot;
                 Canvas.SetLeft(s.Dot, Math.Round((sx + gap + s.Size / 2 - dot / 2) * scale) / scale);
                 Canvas.SetTop(s.Dot, Math.Round((height - BottomMargin - 6 - dot / 2) * scale) / scale); // centre 6 DIP above the shelf's bottom edge
+                // Top-right corner of the icon, growing with it; a wider count stretches the pill to the left.
+                var b = s.Badge!;
+                b.Visibility = s.Count != 0 && s != dragged ? Visibility.Visible : Visibility.Collapsed;
+                var bh = s.Size * 0.34;
+                var text = (TextBlock)b.Child;
+                text.FontSize = bh * 0.68;
+                text.Margin = new Thickness(0, 0, 0, 2 * InkDrop(text) * text.FontSize); // lifts the digits by their drop, so their ink is centred in the circle
+                text.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                var bw = Math.Max(bh, text.DesiredSize.Width + bh * 0.5);
+                b.CornerRadius = new CornerRadius(bh / 2);
+                Place(b, sx + gap + s.Size - bw + bh * 0.25, Canvas.GetTop(s.Img) - bh * 0.25, bw, bh);
             }
             x += SlotWidth(s);
         }
@@ -518,6 +552,17 @@ public partial class DockWindow : Window
             Canvas.SetTop(Label, Canvas.GetTop(img) - Inset - TagLift - h - TagArrowH);
         }
         else Label.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>How far below the middle of its line the text's ink lies, in em: digits sit low in the line box, so centring the box leaves them off-centre.</summary>
+    double InkDrop(TextBlock text)
+    {
+        if (text.Text.Length == 0) return 0;
+        if (inkDrops.TryGetValue(text.Text, out var drop)) return drop;
+        var face = new Typeface(text.FontFamily, text.FontStyle, text.FontWeight, text.FontStretch);
+        var shaped = new FormattedText(text.Text, System.Globalization.CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, face, 1, Brushes.Black, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        var ink = shaped.BuildGeometry(new Point()).Bounds;
+        return inkDrops[text.Text] = ink.Top + ink.Height / 2 - shaped.Height / 2;
     }
 
     /// <summary>A name tag's pill and arrow as one shape, sized to its text, whose bottom margin leaves room for the arrow.</summary>
