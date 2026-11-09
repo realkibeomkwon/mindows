@@ -41,6 +41,7 @@ public partial class DockWindow : Window
         public List<IntPtr> Windows = new();
         public double Size, Target;
         public double ShiftX, ShiftY; // drawn offset from the laid-out spot, eased to 0 so moves slide
+        public bool Returning;        // easing back from a collapsed slot; magnification must not snap it
         public Image? Img;
         public Ellipse? Dot;
         public Rectangle? Line;
@@ -64,6 +65,7 @@ public partial class DockWindow : Window
     Slot? hovered;
     double mouseX = double.NaN;  // NaN while the pointer is off the dock
     double anchorX = double.NaN; // the dock point under this x stays put while icons grow or shrink
+    double magnifyBlend;         // 0 = rest sizes, 1 = the curve for anchorX; widths always match this blend
     Slot? pressed, dragged;      // icon under the left button; set as dragged once it moves past the drag threshold
     Point pressAt, grab;         // press point in Root, and in the icon
     Point ghostAt;               // dragged icon's top-left in Root
@@ -400,17 +402,37 @@ public partial class DockWindow : Window
 
     void Retarget()
     {
+        // Curve at the anchor, not the raw pointer. Leaving the dock clears mouseX but keeps the anchor,
+        // so the curve can shrink in place instead of flattening in one frame.
         var x = (Root.ActualWidth - (Pad * 2 + slots.Sum(BaseWidth))) / 2 + Pad;
         foreach (var s in slots)
         {
             var w = BaseWidth(s);
             s.Target = removing && s == dragged ? 0
-                : s.Separator || double.IsNaN(mouseX) ? Base : Magnify(Math.Abs(mouseX - (x + w / 2)), Base, Max, Range);
+                : s.Separator || double.IsNaN(anchorX) ? Base : Magnify(Math.Abs(anchorX - (x + w / 2)), Base, Max, Range);
             x += w;
         }
+        ApplyMagnification();
         if (animating) return;
         animating = true;
         CompositionTarget.Rendering += Animate;
+    }
+
+    double ShownSize(Slot s) => removing && s == dragged ? 0 : Base + (s.Target - Base) * magnifyBlend;
+
+    /// <summary>
+    /// Scales every icon by the same blend of its curve. The anchor and the widths then describe one pointer,
+    /// so a move cannot shift the row and have the following frames slide it back.
+    /// </summary>
+    void ApplyMagnification()
+    {
+        foreach (var s in slots)
+        {
+            if (s.Separator) continue;
+            var shown = ShownSize(s);
+            if (shown < Base || s.Size < Base - 0.5) s.Returning = true;
+            if (!s.Returning) s.Size = shown;
+        }
     }
 
     void Animate(object? sender, EventArgs e)
@@ -422,9 +444,23 @@ public partial class DockWindow : Window
             done = false;
             return v * 0.7;
         }
+        var blendTarget = double.IsNaN(mouseX) ? 0 : 1;
+        var gap = blendTarget - magnifyBlend;
+        if (Math.Abs(gap) < 0.01) magnifyBlend = blendTarget;
+        else
+        {
+            done = false;
+            magnifyBlend += gap * 0.3;
+        }
+        ApplyMagnification();
         foreach (var s in slots)
         {
-            s.Size = s.Target - Ease(s.Target - s.Size);
+            if (s.Returning)
+            {
+                var shown = ShownSize(s);
+                s.Size = shown - Ease(shown - s.Size);
+                if (shown >= Base && Math.Abs(s.Size - shown) <= 0.25) s.Returning = false;
+            }
             (s.ShiftX, s.ShiftY) = (Ease(s.ShiftX), Ease(s.ShiftY));
         }
         leftShift = Ease(leftShift);
