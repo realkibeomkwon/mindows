@@ -39,18 +39,18 @@
                     </LinearGradientBrush>
                 </Border.Background>
             </Border>
-            <!-- macOS-style name tag: a translucent pill with an arrow, one shape so the fill doesn't double up where they meet. -->
+            <!-- macOS-style name tag: a pill with an arrow, one shape so the fill doesn't double up where they meet. Colored by theme, nearly opaque, so the text never depends on the wallpaper. -->
             <Grid x:Name="Label" Panel.ZIndex="100" Visibility="Collapsed" IsHitTestVisible="False">
-                <Path x:Name="LabelShape" Fill="{DynamicResource DockBg}" Stroke="{DynamicResource DockBorder}" StrokeThickness="1"/>
-                <TextBlock x:Name="LabelText" FontSize="13" Margin="12,3,12,9" Foreground="{DynamicResource BarFg}"/>
+                <Path x:Name="LabelShape" Fill="{DynamicResource MenuBg}" Stroke="{DynamicResource MenuBorder}" StrokeThickness="1"/>
+                <TextBlock x:Name="LabelText" FontSize="13" Margin="12,3,12,9" Foreground="{DynamicResource MenuFg}"/>
             </Grid>
             <!-- The icon being dragged; a popup so it can leave the dock window. -->
             <Popup x:Name="Ghost" AllowsTransparency="True" Placement="Relative" PlacementTarget="{Binding ElementName=Root}"
                    IsHitTestVisible="False">
                 <StackPanel x:Name="GhostPanel">
                     <Grid x:Name="RemoveLabel" HorizontalAlignment="Center" Margin="0,0,0,4" Visibility="Collapsed">
-                        <Path x:Name="RemoveShape" Fill="{DynamicResource DockBg}" Stroke="{DynamicResource DockBorder}" StrokeThickness="1"/>
-                        <TextBlock x:Name="RemoveText" Text="제거" FontSize="13" Margin="12,3,12,9" Foreground="{DynamicResource BarFg}"/>
+                        <Path x:Name="RemoveShape" Fill="{DynamicResource MenuBg}" Stroke="{DynamicResource MenuBorder}" StrokeThickness="1"/>
+                        <TextBlock x:Name="RemoveText" Text="제거" FontSize="13" Margin="12,3,12,9" Foreground="{DynamicResource MenuFg}"/>
                     </Grid>
                     <Image x:Name="GhostImg" RenderOptions.BitmapScalingMode="HighQuality"/>
                 </StackPanel>
