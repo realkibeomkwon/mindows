@@ -529,13 +529,41 @@ public partial class DockWindow : Window
                 LabelText.Text = hovered.Name;
                 LabelShape.Data = TagShape(LabelText);
             }
+            var appearing = Label.Visibility != Visibility.Visible;
             Label.Visibility = Visibility.Visible;
             double w = LabelText.DesiredSize.Width, h = LabelText.DesiredSize.Height - TagArrowH;
             Canvas.SetLeft(Label, Canvas.GetLeft(img) + hovered.Size / 2 - w / 2);
             // As on macOS, the arrow sits just above the shelf, and rises with a magnified icon.
             Canvas.SetTop(Label, Canvas.GetTop(img) - Inset - TagLift - h - TagArrowH);
+            // Sampled only as the tag appears, while it is not yet drawn over the pixels it measures.
+            // shortcut: the tag keeps that color while it slides between icons; sample per icon if the wallpaper varies a lot along the dock.
+            if (appearing) LabelText.Foreground = TextOverScreen(Root.PointToScreen(new Point(Canvas.GetLeft(Label), Canvas.GetTop(Label))), w, h + TagArrowH);
         }
         else Label.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>White over a dark patch of the screen and black over a light one, measured from the pixels on screen so the dock's glass counts.</summary>
+    Brush TextOverScreen(Point topLeft, double width, double height)
+    {
+        var dpi = VisualTreeHelper.GetDpi(this);
+        int w = Math.Max(1, (int)(width * dpi.DpiScaleX)), h = Math.Max(1, (int)(height * dpi.DpiScaleY));
+        try
+        {
+            using var bmp = new System.Drawing.Bitmap(w, h);
+            using (var g = System.Drawing.Graphics.FromImage(bmp)) g.CopyFromScreen((int)topLeft.X, (int)topLeft.Y, 0, 0, bmp.Size);
+            double sum = 0;
+            for (var y = 0; y < h; y++)
+                for (var x = 0; x < w; x++)
+                {
+                    var c = bmp.GetPixel(x, y);
+                    sum += 0.0722 * c.B + 0.7152 * c.G + 0.2126 * c.R;
+                }
+            return sum / (w * h) < 128 ? Brushes.White : Brushes.Black;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return (Brush)FindResource("BarFg"); // a locked screen or a secure desktop can't be read
+        }
     }
 
     /// <summary>A name tag's pill and arrow as one shape, sized to its text, whose bottom margin leaves room for the arrow.</summary>
