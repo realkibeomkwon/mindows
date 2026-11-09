@@ -447,6 +447,7 @@ public partial class MenuBarWindow : Window
     internal static string IconName(NotifyIcon icon)
     {
         if (icon.GUID == new Guid(NotificationArea.VOLUME_GUID)) return "Volume";
+        File.AppendAllText(Path.Combine(Path.GetTempPath(), "mindows-tray.log"), $"Path=[{icon.Path}] Title=[{icon.Title}] UID={icon.UID} GUID={icon.GUID}\n"); // TEMP
         string? product = null;
         try { product = FileVersionInfo.GetVersionInfo(icon.Path).ProductName?.Trim(); }
         catch (Exception e) when (e is IOException or ArgumentException) { }
