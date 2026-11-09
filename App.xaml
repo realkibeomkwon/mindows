@@ -4,8 +4,7 @@
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
         <!-- Theme brushes (BarBg, BarFg, MenuBg, ...) are set in App.ApplyTheme. -->
-        <!-- Pretendard is close to the macOS system font. It is embedded (Fonts\, SIL OFL) so it does not depend on being installed; Windows' own UI font follows. -->
-        <FontFamily x:Key="UiFont">pack://application:,,,/Fonts/#Pretendard, Segoe UI Variable Text, Segoe UI</FontFamily>
+        <FontFamily x:Key="UiFont">Segoe UI Variable Text, Segoe UI</FontFamily>
 
         <!-- Geometry traced from macOS menu captures at 2x, in pt as DIPs: 24 high rows, 6 inset around the rows,
              11 high separators, text 10 inside the highlight, a 14 corner radius and a wide, soft shadow (28 of transparent margin holds it). -->
