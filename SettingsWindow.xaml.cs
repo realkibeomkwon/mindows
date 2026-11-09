@@ -124,7 +124,7 @@ public partial class SettingsWindow : Window
                 var rest = config.HiddenTrayIcons.Where(h => !MenuBarWindow.SavedAs(icon, h));
                 config.HiddenTrayIcons = (toggle.IsChecked == true ? rest : rest.Append(icon.Identifier)).ToArray();
                 config.Save();
-                bar.ApplyTray();
+                foreach (var b in MenuBarWindow.All) b.ApplyTray();
             };
             DockPanel.SetDock(toggle, Dock.Right);
             row.Children.Add(toggle);
@@ -140,7 +140,7 @@ public partial class SettingsWindow : Window
         {
             config.MaxTrayIcons = max;
             config.Save();
-            bar.ApplyTray();
+            foreach (var b in MenuBarWindow.All) b.ApplyTray();
         }
         MaxTrayBox.Text = $"{config.MaxTrayIcons}";
     }
@@ -242,10 +242,13 @@ public partial class SettingsWindow : Window
     void IconSize_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         IconSizeBox.Text = $"{e.NewValue:0}";
-        if (!syncing) dock.SetIconSize(e.NewValue, commit: Mouse.Captured is not Thumb);
+        if (!syncing) foreach (var d in DockWindow.All) d.SetIconSize(e.NewValue, commit: Mouse.Captured is not Thumb);
     }
 
-    void IconSize_DragCompleted(object sender, DragCompletedEventArgs e) => dock.SetIconSize(IconSize.Value, commit: true);
+    void IconSize_DragCompleted(object sender, DragCompletedEventArgs e)
+    {
+        foreach (var d in DockWindow.All) d.SetIconSize(IconSize.Value, commit: true);
+    }
 
     /// <summary>Applies a typed size through the slider, which clamps it; anything else puts the current size back.</summary>
     void CommitIconSizeBox()
@@ -323,11 +326,18 @@ public partial class SettingsWindow : Window
         config.MenuBarTransparent = MenuBarTransparent.IsChecked == true;
         config.Save();
         App.ApplyBarBackground(config.MenuBarTransparent);
-        bar.UpdateForeground();
+        foreach (var b in MenuBarWindow.All) b.UpdateForeground();
     }
 
-    void Magnification_Click(object sender, RoutedEventArgs e) => dock.SetMagnification(Magnification.IsChecked == true);
-    void AutoHide_Click(object sender, RoutedEventArgs e) => dock.SetAutoHide(AutoHide.IsChecked == true);
+    void Magnification_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var d in DockWindow.All) d.SetMagnification(Magnification.IsChecked == true);
+    }
+
+    void AutoHide_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var d in DockWindow.All) d.SetAutoHide(AutoHide.IsChecked == true);
+    }
 
     // The dock reads this on its next slide, so there is nothing to apply.
     void AutoHideAnimation_Click(object sender, RoutedEventArgs e)

@@ -7,7 +7,7 @@ using static Mindows.Native;
 namespace Mindows;
 
 /// <summary>
-/// Registers a window as a shell app bar on the primary monitor so maximized windows stop at it.
+/// Registers a window as a shell app bar on the primary monitor (or the one chosen) so maximized windows stop at it.
 /// The window may be taller than the reserved strip (the dock needs room to magnify).
 /// </summary>
 sealed class AppBar
@@ -24,16 +24,18 @@ sealed class AppBar
     readonly Window window;
     readonly uint edge;
     readonly Func<double> reserve, height; // DIPs
+    readonly Func<(RECT bounds, double scale)?> monitor; // null result: the monitor is gone
     IntPtr hwnd;
     RECT reserved;
     bool fullScreenReported; // last ABN_FULLSCREENAPP
 
-    public AppBar(Window window, uint edge, Func<double> reserve, Func<double> height)
+    public AppBar(Window window, uint edge, Func<double> reserve, Func<double> height, Func<(RECT bounds, double scale)?>? monitor = null)
     {
         (this.window, this.edge, this.reserve, this.height) = (window, edge, reserve, height);
+        this.monitor = monitor ?? (() => PrimaryMonitor());
         if (all.Count == 0) SetWinEventHook(3, 3, IntPtr.Zero, foregroundHook, 0, 0, 0); // EVENT_SYSTEM_FOREGROUND, out of context
         all.Add(this);
-        SystemEvents.SessionSwitch += (_, e) =>
+        SessionSwitchEventHandler onSession = (_, e) =>
         {
             if (e.Reason is SessionSwitchReason.SessionLock or SessionSwitchReason.SessionUnlock)
                 window.Dispatcher.BeginInvoke(() =>
@@ -42,6 +44,7 @@ sealed class AppBar
                     UpdateVisibility();
                 });
         };
+        SystemEvents.SessionSwitch += onSession;
         window.SourceInitialized += (_, _) =>
         {
             hwnd = new WindowInteropHelper(window).Handle;
@@ -51,7 +54,12 @@ sealed class AppBar
             HwndSource.FromHwnd(hwnd).AddHook(Hook);
             Register();
         };
-        window.Closed += (_, _) => Remove();
+        window.Closed += (_, _) =>
+        {
+            Remove();
+            all.Remove(this); // here, not in Remove(), which RemoveAll calls while iterating
+            SystemEvents.SessionSwitch -= onSession;
+        };
     }
 
     public static void RemoveAll()
@@ -79,8 +87,8 @@ sealed class AppBar
     /// <summary>Re-reserves the screen strip and moves the window. Every maximized window resizes, so not per frame.</summary>
     public void Position()
     {
-        if (hwnd == IntPtr.Zero) return;
-        var (bounds, scale) = PrimaryMonitor();
+        if (hwnd == IntPtr.Zero || monitor() is not { } m) return;
+        var (bounds, scale) = m;
         var r = (int)Math.Round(reserve() * scale);
         var d = Data();
         d.rc = bounds;
@@ -95,8 +103,8 @@ sealed class AppBar
     /// <summary>Fits the window to the current height without changing the reservation.</summary>
     public void Resize()
     {
-        if (hwnd == IntPtr.Zero) return;
-        var h = (int)Math.Round(height() * PrimaryMonitor().scale);
+        if (hwnd == IntPtr.Zero || monitor() is not { } m) return;
+        var h = (int)Math.Round(height() * m.scale);
         var top = edge == Top ? reserved.Top : reserved.Bottom - h;
         SetWindowPos(hwnd, HWND_TOPMOST, reserved.Left, top, reserved.Right - reserved.Left, h, SWP_NOACTIVATE);
     }
@@ -120,6 +128,7 @@ sealed class AppBar
         }
         else if (msg is 0x7E or 0x2E0) // WM_DISPLAYCHANGE, WM_DPICHANGED
         {
+            if (msg == 0x7E) Taskbar.Recheck(); // a newly attached monitor brings its own taskbar
             window.Dispatcher.BeginInvoke(Position);
         }
         return IntPtr.Zero;
@@ -133,13 +142,13 @@ sealed class AppBar
 
     // Explorer also reports a full-screen app once the last window closes and whatever is left takes the foreground:
     // the desktop, the lock screen's screen-sized window that stays visible behind it, or a background app's zero-size window.
-    static bool IsFullScreen(IntPtr h)
+    bool IsFullScreen(IntPtr h)
     {
-        if (h == IntPtr.Zero || ClassName(h) is "Progman" or "WorkerW") return false;
+        if (h == IntPtr.Zero || ClassName(h) is "Progman" or "WorkerW" || monitor() is not { } mon) return false;
         GetWindowThreadProcessId(h, out var pid);
         if (Path.GetFileName(QueryProcess(pid).exe) is "LockApp.exe") return false;
         GetWindowRect(h, out var r);
-        var m = PrimaryMonitor().bounds;
+        var m = mon.bounds;
         return r.Left <= m.Left && r.Top <= m.Top && r.Right >= m.Right && r.Bottom >= m.Bottom;
     }
 }

@@ -92,6 +92,7 @@ static class Native
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr GetModuleHandle(string? name);
     [DllImport("user32.dll")] public static extern bool ExitWindowsEx(uint flags, uint reason);
     [DllImport("user32.dll")] public static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr mod, WinEventProc proc, uint pid, uint tid, uint flags);
+    [DllImport("user32.dll")] public static extern bool UnhookWinEvent(IntPtr hook);
     [DllImport("user32.dll")] static extern IntPtr MonitorFromPoint(long pt, uint flags);
     [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr mon, ref MONITORINFO mi);
     [DllImport("shcore.dll")] static extern int GetDpiForMonitor(IntPtr mon, int type, out uint x, out uint y);
@@ -178,6 +179,40 @@ static class Native
         var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
         GetMonitorInfo(mon, ref mi);
         return (mi.rcMonitor, GetDpiForMonitor(mon, 0, out var dpi, out _) == 0 ? dpi / 96.0 : 1.0);
+    }
+
+    delegate bool MonitorEnumProc(IntPtr mon, IntPtr dc, IntPtr rect, IntPtr l);
+    [DllImport("user32.dll")] static extern bool EnumDisplayMonitors(IntPtr dc, IntPtr clip, MonitorEnumProc proc, IntPtr l);
+    [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW", CharSet = CharSet.Unicode)] static extern bool GetMonitorInfoEx(IntPtr mon, ref MONITORINFOEX mi);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct MONITORINFOEX
+    {
+        public int cbSize;
+        public RECT rcMonitor, rcWork;
+        public uint dwFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string szDevice;
+    }
+
+    /// <summary>Every monitor: device name, bounds in physical pixels, DPI scale and whether it is the primary one.</summary>
+    public static List<(string device, RECT bounds, double scale, bool primary)> Monitors()
+    {
+        var list = new List<(string, RECT, double, bool)>();
+        EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (mon, _, _, _) =>
+        {
+            var mi = new MONITORINFOEX { cbSize = Marshal.SizeOf<MONITORINFOEX>() };
+            if (GetMonitorInfoEx(mon, ref mi))
+                list.Add((mi.szDevice, mi.rcMonitor, GetDpiForMonitor(mon, 0, out var dpi, out _) == 0 ? dpi / 96.0 : 1.0, (mi.dwFlags & 1) != 0)); // MONITORINFOF_PRIMARY
+            return true;
+        }, IntPtr.Zero);
+        return list;
+    }
+
+    /// <summary>Bounds and DPI scale of the named monitor; null once it is gone.</summary>
+    public static (RECT bounds, double scale)? MonitorByDevice(string device)
+    {
+        foreach (var m in Monitors()) if (m.device == device) return (m.bounds, m.scale);
+        return null;
     }
 
     /// <summary>Exe path and AppUserModelID (packaged apps only) of a process.</summary>

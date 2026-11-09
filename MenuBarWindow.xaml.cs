@@ -59,17 +59,23 @@ public partial class MenuBarWindow : Window
             "a moved tray icon must land before its new neighbor without moving icons that aren't shown");
     }
 
-    public MenuBarWindow(NotificationArea? tray, Config config, DockWindow dock, Action openSettings)
+    public static readonly List<MenuBarWindow> All = new(); // one per monitor; settings apply to each
+    readonly bool secondary; // the shell's Search and Quick Settings flyouts and the taskbar belong to the primary bar alone
+
+    public MenuBarWindow(NotificationArea? tray, Config config, DockWindow dock, Action openSettings, string? device = null)
     {
         (this.tray, this.config, this.dock, this.openSettings) = (tray, config, dock, openSettings);
+        secondary = device != null;
+        All.Add(this);
         InitializeComponent();
-        _ = new AppBar(this, AppBar.Top, () => BarHeight, () => BarHeight);
+        _ = new AppBar(this, AppBar.Top, () => BarHeight, () => BarHeight, device == null ? null : () => MonitorByDevice(device));
         UpdateForeground();
         // A wallpaper change (a slideshow too) is announced as a desktop preference change.
-        Microsoft.Win32.SystemEvents.UserPreferenceChanged += (_, e) =>
+        Microsoft.Win32.UserPreferenceChangedEventHandler onPrefs = (_, e) =>
         {
             if (e.Category == Microsoft.Win32.UserPreferenceCategory.Desktop) Dispatcher.BeginInvoke(UpdateForeground);
         };
+        Microsoft.Win32.SystemEvents.UserPreferenceChanged += onPrefs;
         if (tray != null)
         {
             trayView = TrayView(tray, config);
@@ -79,13 +85,16 @@ public partial class MenuBarWindow : Window
         }
 
         foregroundHook = (_, _, h, idObject, _, _, _) => { if (idObject == 0) OnForeground(h); };
-        SetWinEventHook(3, 3, IntPtr.Zero, foregroundHook, 0, 0, 0); // EVENT_SYSTEM_FOREGROUND, out of context
+        var hooks = new List<IntPtr> { SetWinEventHook(3, 3, IntPtr.Zero, foregroundHook, 0, 0, 0) }; // EVENT_SYSTEM_FOREGROUND, out of context
         OnForeground(GetForegroundWindow());
         // Catch flyouts as they appear, before they take the foreground, so they don't show at the bottom first.
         shownHook = (_, _, h, idObject, _, _, _) => { if (idObject == 0) WatchFlyout(h); };
-        // WINEVENT_SKIPOWNPROCESS (2): our own windows are never flyouts.
-        SetWinEventHook(0x8002, 0x8002, IntPtr.Zero, shownHook, 0, 0, 2); // EVENT_OBJECT_SHOW: Quick Settings
-        SetWinEventHook(0x8018, 0x8018, IntPtr.Zero, shownHook, 0, 0, 2); // EVENT_OBJECT_UNCLOAKED: Search
+        if (!secondary)
+        {
+            // WINEVENT_SKIPOWNPROCESS (2): our own windows are never flyouts.
+            hooks.Add(SetWinEventHook(0x8002, 0x8002, IntPtr.Zero, shownHook, 0, 0, 2)); // EVENT_OBJECT_SHOW: Quick Settings
+            hooks.Add(SetWinEventHook(0x8018, 0x8018, IntPtr.Zero, shownHook, 0, 0, 2)); // EVENT_OBJECT_UNCLOAKED: Search
+        }
         flyoutTimer.Tick += (_, _) => PlaceFlyout();
         NetworkChange.NetworkAddressChanged += (_, _) => networkChanged = true;
 
@@ -103,6 +112,14 @@ public partial class MenuBarWindow : Window
         var imeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
         imeTimer.Tick += (_, _) => UpdateIme();
         imeTimer.Start();
+        Closed += (_, _) =>
+        {
+            All.Remove(this);
+            timer.Stop();
+            imeTimer.Stop();
+            foreach (var hook in hooks) UnhookWinEvent(hook);
+            Microsoft.Win32.SystemEvents.UserPreferenceChanged -= onPrefs;
+        };
     }
 
     /// <summary>The taskbar's input indicator for the Korean IME in the foreground app: 한 in Hangul mode, A otherwise.</summary>
@@ -246,7 +263,7 @@ public partial class MenuBarWindow : Window
 
     void WatchFlyout(IntPtr h)
     {
-        if (h == flyout) return;
+        if (secondary || h == flyout) return;
         // Notification Center already starts under the menu bar, and its calendar can't be moved on its own.
         var cls = ClassName(h);
         if (cls == "Windows.UI.Core.CoreWindow" && IsSearch(h)) search = h;
@@ -369,7 +386,7 @@ public partial class MenuBarWindow : Window
 
     void Tick()
     {
-        ReadySearch();
+        if (!secondary) ReadySearch();
         UpdateNetwork();
         UpdateVolume();
         UpdateUsage();
@@ -386,7 +403,7 @@ public partial class MenuBarWindow : Window
             BatteryFill.Background = power.ACLineStatus == 1 ? Brushes.LimeGreen
                 : power.BatteryLifePercent <= 20 ? Brushes.OrangeRed : (Brush)FindResource("BarFg");
         }
-        Taskbar.Recheck();
+        if (!secondary) Taskbar.Recheck();
     }
 
     bool HasAppWindow => foregroundApp != null && WindowTracker.IsAppWindow(foreground);

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -48,11 +49,47 @@ public partial class App : Application
         shell = StartTrayHost(config.TrayOrder);
         var dock = new DockWindow(config) { Tray = shell?.NotificationArea };
         MenuBarWindow bar = null!; // the settings callback runs only after this is assigned
-        bar = new MenuBarWindow(shell?.NotificationArea, config, dock, () => SettingsWindow.Open(config, dock, shell?.NotificationArea, bar));
+        Action openSettings = () => SettingsWindow.Open(config, dock, shell?.NotificationArea, bar);
+        bar = new MenuBarWindow(shell?.NotificationArea, config, dock, openSettings);
         bar.Show();
         dock.Show();
+        SyncMonitors(config, openSettings);
+        SystemEvents.DisplaySettingsChanged += (_, _) => Dispatcher.BeginInvoke(() => SyncMonitors(config, openSettings));
         HotCorners.Start(config);
     }
+
+    static App()
+    {
+        var (add, remove) = MonitorChanges(new[] { "b", "c" }, new[] { "a", "b" });
+        Debug.Assert(add.SequenceEqual(new[] { "c" }) && remove.SequenceEqual(new[] { "a" }),
+            "a monitor change must add bars for new monitors and remove them for gone ones, leaving the rest alone");
+    }
+
+    readonly Dictionary<string, (MenuBarWindow bar, DockWindow dock)> secondaryBars = new();
+
+    /// <summary>Gives every monitor but the primary its own menu bar and dock, and closes them when the monitor goes.</summary>
+    void SyncMonitors(Config config, Action openSettings)
+    {
+        var (add, remove) = MonitorChanges(Native.Monitors().Where(m => !m.primary).Select(m => m.device), secondaryBars.Keys);
+        foreach (var device in remove)
+        {
+            secondaryBars[device].bar.Close();
+            secondaryBars[device].dock.Close();
+            secondaryBars.Remove(device);
+        }
+        foreach (var device in add)
+        {
+            var dock = new DockWindow(config, device);
+            // No tray: the notification area's icons stay on the primary bar.
+            var bar = new MenuBarWindow(null, config, dock, openSettings, device);
+            secondaryBars[device] = (bar, dock);
+            bar.Show();
+            dock.Show();
+        }
+    }
+
+    static (string[] add, string[] remove) MonitorChanges(IEnumerable<string> current, IEnumerable<string> shown) =>
+        (current.Except(shown).ToArray(), shown.Except(current).ToArray());
 
     protected override void OnExit(ExitEventArgs e)
     {

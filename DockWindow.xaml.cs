@@ -88,13 +88,17 @@ public partial class DockWindow : Window
             "a dragged icon must land before its new neighbor without moving entries the dock can't show");
     }
 
-    public DockWindow(Config config)
+    public static readonly List<DockWindow> All = new(); // one per monitor; settings apply to each
+
+    public DockWindow(Config config, string? device = null)
     {
         this.config = config;
+        All.Add(this);
         InitializeComponent();
         blur = new ShelfBlur(this, Root);
         // Auto-hide reserves nothing, so maximized windows reach the bottom of the screen.
-        bar = new AppBar(this, AppBar.Bottom, () => config.DockAutoHide ? 0 : BottomMargin + ShelfH + 3, () => WindowH);
+        bar = new AppBar(this, AppBar.Bottom, () => config.DockAutoHide ? 0 : BottomMargin + ShelfH + 3, () => WindowH,
+            device == null ? null : () => MonitorByDevice(device));
 
         Slot NewSeparator()
         {
@@ -119,7 +123,12 @@ public partial class DockWindow : Window
             if (e.Category == Microsoft.Win32.UserPreferenceCategory.Desktop) UpdateTagForeground(); // a wallpaper change
         });
         Microsoft.Win32.SystemEvents.UserPreferenceChanged += onPrefs;
-        Closed += (_, _) => Microsoft.Win32.SystemEvents.UserPreferenceChanged -= onPrefs;
+        Closed += (_, _) =>
+        {
+            All.Remove(this);
+            Microsoft.Win32.SystemEvents.UserPreferenceChanged -= onPrefs;
+            IconLoader.Arrived -= QueueRefresh;
+        };
 
         MouseMove += (_, e) =>
         {
@@ -184,6 +193,7 @@ public partial class DockWindow : Window
             Resources.Remove("BarFg"); // a solid color or a missing file has no strip to measure
             return;
         }
+        // shortcut: samples the primary monitor's bottom strip even on a secondary dock; use that monitor's height if the wallpapers differ.
         Resources["BarFg"] = SettingsWindow.TextOver(image, SystemParameters.PrimaryScreenHeight - WindowH, WindowH);
     }
 
