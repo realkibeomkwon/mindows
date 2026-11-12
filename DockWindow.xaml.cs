@@ -174,7 +174,7 @@ public partial class DockWindow : Window
     {
         // shortcut: the shell ships it at 64px at most, so it is soft when magnified; draw it as a vector if that shows.
         var path = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), @"SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy",
-            $@"StartMenu\Assets\SearchIcons\SearchIcon{state}{(App.LightTheme ? "Dark" : "Light")}.scale-400.png"); // inverted on purpose: the dock is see-through, so the icon contrasts with the wallpaper rather than a theme-colored bar
+            $@"StartMenu\Assets\SearchIcons\SearchIcon{state}{(App.LightTheme ? "Light" : "Dark")}.scale-400.png"); // shell names assets by theme: Light is the black glyph, Dark the white one
         if (!File.Exists(path)) return null;
         var drawing = new DrawingGroup();
         drawing.Children.Add(new GeometryDrawing(Brushes.Transparent, null, new RectangleGeometry(new Rect(0, 0, 10, 10))));

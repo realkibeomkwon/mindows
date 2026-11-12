@@ -142,6 +142,15 @@ public partial class App : Application
         catch (IOException) { }
     }
 
+    static LinearGradientBrush Vertical(params (string color, double offset)[] stops)
+    {
+        var brush = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
+        foreach (var (color, offset) in stops)
+            brush.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString(color), offset));
+        brush.Freeze();
+        return brush;
+    }
+
     /// <summary>The bar's background alone, for when the setting changes while running. Alpha 1 rather than 0 keeps a transparent bar clickable.</summary>
     public static void ApplyBarBackground(bool transparent)
     {
@@ -168,6 +177,18 @@ public partial class App : Application
             brush.Freeze();
             Resources[keys[i]] = brush;
         }
+        // Dock name tag: black text on the light pill, white text on the dark one.
+        var tagFg = new SolidColorBrush(LightTheme ? Colors.Black : Colors.White);
+        tagFg.Freeze();
+        Resources["TagFg"] = tagFg;
+        // Light glass is a faint white wash. Dark glass lays a charcoal veil over the same blur, so the shelf reads darker without hiding the wallpaper.
+        Resources["ShelfFill"] = LightTheme
+            ? Vertical(("#14FFFFFF", 0), ("#1AFFFFFF", 1))
+            : Vertical(("#40121617", 0), ("#6B121617", 1));
+        // The rim is lit from above. In the dark theme the lower edge is dimmer, so it does not turn the shelf milky.
+        Resources["ShelfRim"] = LightTheme
+            ? Vertical(("#B3FFFFFF", 0), ("#1AFFFFFF", 0.3), ("#1AFFFFFF", 0.7), ("#8CFFFFFF", 1))
+            : Vertical(("#A6FFFFFF", 0), ("#14FFFFFF", 0.3), ("#14FFFFFF", 0.7), ("#59FFFFFF", 1));
         // macOS lights the dock's rim from above: bright along the top edge, fading toward the bottom.
         var rim = new LinearGradientBrush((Color)ColorConverter.ConvertFromString("#66FFFFFF"), (Color)ColorConverter.ConvertFromString("#1FFFFFFF"), 90);
         rim.Freeze();

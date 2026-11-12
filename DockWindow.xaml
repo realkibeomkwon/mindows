@@ -22,27 +22,13 @@
                     </LinearGradientBrush>
                 </Border.BorderBrush>
             </Border>
-            <Border x:Name="Shelf" CornerRadius="18" BorderThickness="1">
-                <Border.BorderBrush>
-                    <!-- as on macOS the rim is bright along the top and bottom runs and round the corners, and dies out before the straight sides (corner arc ≈ 0.3 of the height) -->
-                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                        <GradientStop Color="#B3FFFFFF" Offset="0"/>
-                        <GradientStop Color="#1AFFFFFF" Offset="0.3"/>
-                        <GradientStop Color="#1AFFFFFF" Offset="0.7"/>
-                        <GradientStop Color="#8CFFFFFF" Offset="1"/>
-                    </LinearGradientBrush>
-                </Border.BorderBrush>
-                <Border.Background>
-                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                        <GradientStop Color="#14FFFFFF" Offset="0"/>
-                        <GradientStop Color="#1AFFFFFF" Offset="1"/>
-                    </LinearGradientBrush>
-                </Border.Background>
-            </Border>
+            <!-- ShelfFill and ShelfRim follow the theme. The rim stays bright on the top and bottom and dies out on the straight sides (corner arc ≈ 0.3 of the height), as on macOS. -->
+            <Border x:Name="Shelf" CornerRadius="18" BorderThickness="1"
+                    Background="{DynamicResource ShelfFill}" BorderBrush="{DynamicResource ShelfRim}"/>
             <!-- macOS-style name tag: a pill with an arrow, one shape so the fill doesn't double up where they meet. Colored by theme, nearly opaque, so the text never depends on the wallpaper. -->
             <Grid x:Name="Label" Panel.ZIndex="100" Visibility="Collapsed" IsHitTestVisible="False">
                 <Path x:Name="LabelShape" Fill="{DynamicResource MenuBg}" Stroke="{DynamicResource MenuBorder}" StrokeThickness="1"/>
-                <TextBlock x:Name="LabelText" FontSize="13" Margin="12,3,12,9" Foreground="{DynamicResource MenuFg}"/>
+                <TextBlock x:Name="LabelText" FontSize="13" Margin="12,3,12,9" Foreground="{DynamicResource TagFg}"/>
             </Grid>
             <!-- The icon being dragged; a popup so it can leave the dock window. -->
             <Popup x:Name="Ghost" AllowsTransparency="True" Placement="Relative" PlacementTarget="{Binding ElementName=Root}"
