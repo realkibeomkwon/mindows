@@ -411,6 +411,39 @@ public partial class MenuBarWindow : Window
     IEnumerable<IntPtr> ForegroundAppWindows() =>
         WindowTracker.List().Where(w => w.App.Key == foregroundApp?.Key).Select(w => w.Hwnd);
 
+    // Mirrors the Win+X menu, which Explorer would open at the hidden Start button instead of here.
+    void Logo_RightClick(object sender, MouseButtonEventArgs e)
+    {
+        Menus.Show(LogoButton, PlacementMode.Bottom, new Control?[]
+        {
+            Menus.Item("설치된 앱", () => Sys.Launch("ms-settings:appsfeatures")),
+            Menus.Item("모빌리티 센터", () => Sys.Launch("mblctr.exe")),
+            Menus.Item("전원 옵션", () => Sys.Launch("ms-settings:powersleep")),
+            Menus.Item("이벤트 뷰어", () => Sys.Launch("eventvwr.msc")),
+            Menus.Item("시스템", () => Sys.Launch("ms-settings:about")),
+            Menus.Item("장치 관리자", () => Sys.Launch("devmgmt.msc")),
+            Menus.Item("네트워크 연결", () => Sys.Launch("ms-settings:network-status")),
+            Menus.Item("디스크 관리", () => Sys.Launch("diskmgmt.msc")),
+            Menus.Item("컴퓨터 관리", () => Sys.Launch("compmgmt.msc")),
+            Menus.Item("터미널", () => Sys.Launch("wt.exe")),
+            Menus.Item("터미널(관리자)", () => Sys.Launch("wt.exe", verb: "runas")),
+            null,
+            Menus.Item("작업 관리자", () => Sys.Launch("taskmgr.exe")),
+            Menus.Item("설정", () => Sys.Launch("ms-settings:")),
+            Menus.Item("파일 탐색기", () => Sys.Launch("explorer.exe")),
+            Menus.Item("검색", () => Sys.WinKey('S')),
+            Menus.Item("실행", () => Sys.WinKey('R')),
+            null,
+            Menus.Item("시스템 종료", () => { if (Sys.Confirm("지금 시스템을 종료하시겠습니까?")) Sys.Run("shutdown", "/s /t 0"); }),
+            Menus.Item("재시동", () => { if (Sys.Confirm("지금 재시동하시겠습니까?")) Sys.Run("shutdown", "/r /t 0"); }),
+            Menus.Item("잠자기", () => SetSuspendState(false, false, false)),
+            Menus.Item("로그아웃", () => { if (Sys.Confirm("로그아웃하시겠습니까?")) ExitWindowsEx(0, 0); }),
+            null,
+            Menus.Item("바탕 화면", () => Sys.WinKey('D')),
+        });
+        e.Handled = true;
+    }
+
     void Logo_Click(object sender, RoutedEventArgs e)
     {
         Menus.Show(LogoButton, PlacementMode.Bottom, new Control?[]
@@ -429,6 +462,17 @@ public partial class MenuBarWindow : Window
             null,
             Menus.Item("Mindows 설정...", openSettings),
             Menus.Item("Mindows 종료",() => Application.Current.Shutdown()),
+        });
+    }
+
+    // Source is the window itself only for empty space; every control reports itself.
+    void Bar_RightClick(object sender, MouseButtonEventArgs e)
+    {
+        if (e.Source != this) return;
+        Menus.Show(this, PlacementMode.MousePoint, new Control?[]
+        {
+            Menus.Item("작업 관리자", () => Sys.Launch("taskmgr.exe")),
+            Menus.Item("작업 표시줄 설정", () => Sys.Launch("ms-settings:taskbar")),
         });
     }
 

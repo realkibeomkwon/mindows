@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:Mindows"
         Title="Mindows Menu Bar" WindowStyle="None" AllowsTransparency="True" ResizeMode="NoResize"
-        ShowInTaskbar="False" Topmost="True" ShowActivated="False"
+        ShowInTaskbar="False" Topmost="True" ShowActivated="False" MouseRightButtonUp="Bar_RightClick"
         Left="-20000" Top="-20000" Width="10" Height="10"
         Background="{DynamicResource BarBg}" Foreground="{DynamicResource BarFg}"
         FontFamily="{StaticResource UiFont}" FontSize="13" TextOptions.TextHintingMode="Animated">
@@ -46,7 +46,7 @@
     <DockPanel LastChildFill="False">
         <!-- As on macOS, the menu titles sit closer together than the status items on the right. -->
         <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Margin="9,0,0,0">
-            <Button x:Name="LogoButton" Style="{StaticResource BarButton}" Padding="8,0" Click="Logo_Click">
+            <Button x:Name="LogoButton" Style="{StaticResource BarButton}" Padding="8,0" Click="Logo_Click" MouseRightButtonUp="Logo_RightClick">
                 <!-- Mindows.ico redrawn as vectors so it stays sharp at any scale (256-unit grid of the icon's largest frame). -->
                 <Viewbox Width="18" Height="18">
                     <Canvas Width="256" Height="256">

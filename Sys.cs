@@ -10,15 +10,15 @@ namespace Mindows;
 /// <summary>Actions shared by the menu bar and the dock.</summary>
 static class Sys
 {
-    public static void Launch(string path, string args = "")
+    public static void Launch(string path, string args = "", string? verb = null)
     {
         try
         {
-            if (LaunchViaExplorer(path, args)) return;
+            if (LaunchViaExplorer(path, args, verb)) return;
             if (path.StartsWith("shell:", StringComparison.OrdinalIgnoreCase) || path.StartsWith("::"))
                 Process.Start("explorer.exe", path);
             else
-                Process.Start(new ProcessStartInfo(path, args) { UseShellExecute = true });
+                Process.Start(new ProcessStartInfo(path, args) { UseShellExecute = true, Verb = verb ?? "" });
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
@@ -30,7 +30,7 @@ static class Sys
     /// Has Explorer start the app through its desktop view. A child of this process would inherit the uiAccess token's
     /// raised integrity, and dock-launched apps must run as a normal user. Returns false when Explorer's desktop is not available.
     /// </summary>
-    static bool LaunchViaExplorer(string path, string args)
+    static bool LaunchViaExplorer(string path, string args, string? verb)
     {
         try
         {
@@ -40,7 +40,7 @@ static class Sys
             dynamic shell = desktop.Document.Application;
             GetWindowThreadProcessId(GetShellWindow(), out var pid);
             AllowSetForegroundWindow(pid); // the app's window would otherwise open behind
-            shell.ShellExecute(path, args, null, null, 1 /* SW_SHOWNORMAL */);
+            shell.ShellExecute(path, args, null, verb, 1 /* SW_SHOWNORMAL */);
             return true;
         }
         catch (Exception) // COM failures surface as many exception types; the direct launch is the fallback
