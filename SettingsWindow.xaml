@@ -313,7 +313,7 @@
                                  AutomationProperties.Name="메뉴 막대에 표시할 최대 개수"
                                  KeyDown="MaxTrayBox_KeyDown" LostKeyboardFocus="MaxTrayBox_LostKeyboardFocus"/>
                         <TextBlock VerticalAlignment="Center" TextWrapping="Wrap"
-                                   Text="메뉴 막대에 표시할 최대 개수 (0은 제한 없음, 넘치는 아이콘은 ⋯ 메뉴에 표시)"/>
+                                   Text="최대 표시 개수 (0은 제한 없음)"/>
                     </DockPanel>
                 </Border>
                 <Border Style="{StaticResource Card}">
