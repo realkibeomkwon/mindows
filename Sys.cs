@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Runtime.InteropServices;
 using System.Windows.Controls.Primitives;
 using static Mindows.Native;
@@ -77,7 +78,7 @@ static class Sys
 
 static class Menus
 {
-    public const double ShadowMargin = 28; // keep equal to the ContextMenu template's outer margin in App.xaml
+    public const double ShadowMargin = 28; // keep equal to the ContextMenu template's default Padding in App.xaml
 
     public static MenuItem Item(string header, Action onClick, bool enabled = true, bool? isChecked = null, string? shortcut = null)
     {
@@ -87,11 +88,24 @@ static class Menus
         return item;
     }
 
-    /// <summary>Opens a menu at <paramref name="target"/>; null entries become separators.</summary>
-    public static void Show(UIElement target, PlacementMode placement, IEnumerable<Control?> items)
+    /// <summary>Opens a menu at <paramref name="target"/>; null entries become separators. <paramref name="inset"/> puts the menu's visible left edge inside the target, e.g. past a button's padding.</summary>
+    public static void Show(UIElement target, PlacementMode placement, IEnumerable<Control?> items, double inset = 0)
     {
         // The template keeps ShadowMargin of transparent space around the menu for its shadow; offset it away so the visible edge meets the target.
-        var menu = new ContextMenu { PlacementTarget = target, Placement = placement, HorizontalOffset = -ShadowMargin };
+        // A popup never starts left of its monitor, so a menu opening at that edge takes only the room that is left instead of leaving a gap beside the target.
+        GetCursorPos(out var cursor);
+        var anchor = placement is PlacementMode.Mouse or PlacementMode.MousePoint
+            ? new Point(cursor.X, cursor.Y)
+            : target.PointToScreen(new Point(inset, 0));
+        var scale = VisualTreeHelper.GetDpi(target).DpiScaleX;
+        var room = Math.Clamp((anchor.X - MonitorLeft(anchor)) / scale, 0, ShadowMargin);
+        var menu = new ContextMenu
+        {
+            PlacementTarget = target,
+            Placement = placement,
+            HorizontalOffset = inset - room,
+            Padding = new Thickness(room, ShadowMargin, 2 * ShadowMargin - room, ShadowMargin), // the room taken from the left joins the right, so the box keeps its width
+        };
         menu.VerticalOffset = placement == PlacementMode.Top ? ShadowMargin : -ShadowMargin;
         foreach (var item in items) menu.Items.Add(item ?? new Separator());
         // macOS aligns every title right of a shared state column when any item can be checked.
@@ -102,6 +116,10 @@ static class Menus
         menu.IsOpen = true;
         WatchForDismiss(menu);
     }
+
+    /// <summary>Left edge of the monitor under a screen point, in the device pixels PointToScreen reports.</summary>
+    static int MonitorLeft(Point p) =>
+        Monitors().FirstOrDefault(m => p.X >= m.bounds.Left && p.X < m.bounds.Right && p.Y >= m.bounds.Top && p.Y < m.bounds.Bottom).bounds.Left;
 
     // The bars are WS_EX_NOACTIVATE, so Windows sends an open menu neither keys (Esc) nor clicks on other
     // apps' windows, and WPF never closes it. Activating the menu instead makes WPF close it at once

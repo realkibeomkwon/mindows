@@ -48,7 +48,7 @@
         <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Margin="9,0,0,0">
             <Button x:Name="LogoButton" Style="{StaticResource BarButton}" Padding="8,0" Click="Logo_Click" MouseRightButtonUp="Logo_RightClick">
                 <!-- Mindows.ico redrawn as vectors so it stays sharp at any scale (256-unit grid of the icon's largest frame). -->
-                <Viewbox Width="18" Height="18">
+                <Viewbox x:Name="LogoIcon" Width="18" Height="18">
                     <Canvas Width="256" Height="256">
                         <Rectangle Canvas.Left="5" Canvas.Top="5" Width="246" Height="246" RadiusX="64" RadiusY="64">
                             <Rectangle.Fill>

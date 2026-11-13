@@ -14,10 +14,12 @@
             <Setter Property="TextOptions.TextHintingMode" Value="Animated"/>
             <Setter Property="Foreground" Value="{DynamicResource MenuFg}"/>
             <Setter Property="MinWidth" Value="256"/>
+            <!-- The transparent margin the shadow needs is this padding; Menus.Show narrows it next to the screen edge. -->
+            <Setter Property="Padding" Value="28"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ContextMenu">
-                        <Grid Margin="28">
+                        <Grid Margin="{TemplateBinding Padding}">
                             <Border CornerRadius="14" Background="{DynamicResource MenuBg}">
                                 <Border.Effect>
                                     <DropShadowEffect BlurRadius="28" ShadowDepth="8" Direction="270" Opacity="0.28"/>

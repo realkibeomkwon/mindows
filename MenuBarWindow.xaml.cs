@@ -412,6 +412,9 @@ public partial class MenuBarWindow : Window
     IEnumerable<IntPtr> ForegroundAppWindows() =>
         WindowTracker.List().Where(w => w.App.Key == foregroundApp?.Key).Select(w => w.Hwnd);
 
+    // The logo menus line up with the icon itself, not the wider click area the button keeps around it.
+    double LogoInset => LogoIcon.TranslatePoint(new Point(0, 0), LogoButton).X;
+
     // Mirrors the Win+X menu, which Explorer would open at the hidden Start button instead of here.
     void Logo_RightClick(object sender, MouseButtonEventArgs e)
     {
@@ -441,7 +444,7 @@ public partial class MenuBarWindow : Window
             Menus.Item("로그아웃", () => { if (Sys.Confirm("로그아웃하시겠습니까?")) ExitWindowsEx(0, 0); }),
             null,
             Menus.Item("바탕 화면", () => Sys.WinKey('D')),
-        });
+        }, LogoInset);
         e.Handled = true;
     }
 
@@ -463,7 +466,7 @@ public partial class MenuBarWindow : Window
             null,
             Menus.Item("Mindows 설정...", openSettings),
             Menus.Item("Mindows 종료",() => Application.Current.Shutdown()),
-        });
+        }, LogoInset);
     }
 
     // Source is the window itself only for empty space; every control reports itself.
