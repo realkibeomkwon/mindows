@@ -70,10 +70,11 @@ public partial class MenuBarWindow : Window
         InitializeComponent();
         _ = new AppBar(this, AppBar.Top, () => BarHeight, () => BarHeight, device == null ? null : () => MonitorByDevice(device));
         UpdateForeground();
-        // A wallpaper change (a slideshow too) is announced as a desktop preference change.
+        // A wallpaper change (a slideshow too) is announced as a desktop preference change, often before Windows has rewritten TranscodedWallpaper, so the read waits.
         Microsoft.Win32.UserPreferenceChangedEventHandler onPrefs = (_, e) =>
         {
-            if (e.Category == Microsoft.Win32.UserPreferenceCategory.Desktop) Dispatcher.BeginInvoke(UpdateForeground);
+            if (e.Category == Microsoft.Win32.UserPreferenceCategory.Desktop)
+                Task.Delay(1000).ContinueWith(_ => Dispatcher.BeginInvoke(UpdateForeground));
         };
         Microsoft.Win32.SystemEvents.UserPreferenceChanged += onPrefs;
         if (tray != null)
