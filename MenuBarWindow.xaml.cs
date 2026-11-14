@@ -97,7 +97,8 @@ public partial class MenuBarWindow : Window
             hooks.Add(SetWinEventHook(0x8018, 0x8018, IntPtr.Zero, shownHook, 0, 0, 2)); // EVENT_OBJECT_UNCLOAKED: Search
         }
         flyoutTimer.Tick += (_, _) => PlaceFlyout();
-        NetworkChange.NetworkAddressChanged += (_, _) => networkChanged = true;
+        NetworkAddressChangedEventHandler onNetwork = (_, _) => networkChanged = true;
+        NetworkChange.NetworkAddressChanged += onNetwork;
 
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         timer.Tick += (_, _) =>
@@ -120,6 +121,7 @@ public partial class MenuBarWindow : Window
             imeTimer.Stop();
             foreach (var hook in hooks) UnhookWinEvent(hook);
             Microsoft.Win32.SystemEvents.UserPreferenceChanged -= onPrefs;
+            NetworkChange.NetworkAddressChanged -= onNetwork;
         };
     }
 
@@ -465,7 +467,7 @@ public partial class MenuBarWindow : Window
             Menus.Item("로그아웃...", () => { if (Sys.Confirm("로그아웃하시겠습니까?")) ExitWindowsEx(0, 0); }),
             null,
             Menus.Item("Mindows 설정...", openSettings),
-            Menus.Item("Mindows 종료",() => Application.Current.Shutdown()),
+            Menus.Item("Mindows 종료", () => Application.Current.Shutdown()),
         }, LogoInset);
     }
 
@@ -483,7 +485,17 @@ public partial class MenuBarWindow : Window
     /// <summary>Tray icons the menu bar can show; the power icon is left out because the menu bar draws its own battery, and UsageBar's because it shows its usage as items.</summary>
     internal static bool Listed(NotifyIcon icon) =>
         !icon.IsHidden && icon.GUID != new Guid(NotificationArea.POWER_GUID)
-        && !string.Equals(Path.GetFileName(icon.Path), "UsageBar.exe", StringComparison.OrdinalIgnoreCase);
+        && !string.Equals(Path.GetFileName(ExePath(icon)), "UsageBar.exe", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The exe that owns a tray icon, or "" when Windows won't say. ManagedShell's own Path can't be trusted for a process
+    /// it fails to query (a protected one, e.g. 오피스키퍼): it has held garbage and other icons' paths there.
+    /// </summary>
+    internal static string ExePath(NotifyIcon icon)
+    {
+        GetWindowThreadProcessId(icon.HWnd, out var pid);
+        return QueryProcess(pid).exe ?? "";
+    }
 
     /// <summary>Matches a saved identifier to an icon. Some apps report a different path on every launch, so the UID and title alone also match.</summary>
     internal static bool SavedAs(NotifyIcon icon, string saved) =>
@@ -495,14 +507,14 @@ public partial class MenuBarWindow : Window
     internal static string IconName(NotifyIcon icon)
     {
         if (icon.GUID == new Guid(NotificationArea.VOLUME_GUID)) return "Volume";
-        File.AppendAllText(Path.Combine(Path.GetTempPath(), "mindows-tray.log"), $"Path=[{icon.Path}] Title=[{icon.Title}] UID={icon.UID} GUID={icon.GUID}\n"); // TEMP
+        var exe = ExePath(icon);
         string? product = null;
-        try { product = FileVersionInfo.GetVersionInfo(icon.Path).ProductName?.Trim(); }
+        try { product = FileVersionInfo.GetVersionInfo(exe).ProductName?.Trim(); }
         catch (Exception e) when (e is IOException or ArgumentException) { }
         if (!string.IsNullOrEmpty(product) && !product.StartsWith("Microsoft", StringComparison.OrdinalIgnoreCase)) return product;
         // A multi-line tooltip puts the program's name on the first line and details (an account) below it.
         var title = icon.Title?.Split('\n')[0].Trim();
-        return string.IsNullOrEmpty(title) ? Path.GetFileNameWithoutExtension(icon.Path) : title;
+        return string.IsNullOrEmpty(title) ? Path.GetFileNameWithoutExtension(exe) : title;
     }
 
     /// <summary>
@@ -546,7 +558,8 @@ public partial class MenuBarWindow : Window
     void TrayOverflow_Click(object sender, RoutedEventArgs e) =>
         Menus.Show(TrayOverflow, PlacementMode.Bottom, overflowIcons.Select(icon =>
         {
-            var item = Menus.Item(IconName(icon), () =>
+            var name = IconName(icon);
+            var item = Menus.Item(name, () =>
             {
                 // Ctrl+click brings the icon into the bar; the leftmost shown one takes its place in the overflow.
                 if (CtrlDown)
@@ -565,7 +578,7 @@ public partial class MenuBarWindow : Window
             // The menu template draws only Header, so the icon goes in it.
             var image = new Image { Source = icon.Icon, Width = 16, Height = 16, Margin = new Thickness(0, 0, 8, 0) };
             RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
-            item.Header = new StackPanel { Orientation = Orientation.Horizontal, Children = { image, new TextBlock { Text = IconName(icon) } } };
+            item.Header = new StackPanel { Orientation = Orientation.Horizontal, Children = { image, new TextBlock { Text = name } } };
             return item;
         }));
 

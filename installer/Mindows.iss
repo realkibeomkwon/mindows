@@ -31,8 +31,6 @@ Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
 
 [Files]
 Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-; Pretendard is embedded in Mindows.exe; its SIL OFL text travels with it.
-Source: "..\Fonts\LICENSE.txt"; DestDir: "{app}\licenses"; DestName: "Pretendard-LICENSE.txt"; Flags: ignoreversion
 ; Public part only. uiAccess refuses to start unless the signing certificate is in the machine's trusted roots.
 Source: "MindowsSigning.cer"; DestDir: "{tmp}"; Flags: deleteafterinstall
 

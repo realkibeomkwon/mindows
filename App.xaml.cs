@@ -11,6 +11,7 @@ namespace Mindows;
 public partial class App : Application
 {
     Mutex? instance;
+    bool started; // false for --restore and a second instance, which must not tear down the running one's taskbar state
     static ShellManager? shell;
     public static bool LightTheme { get; private set; }
 
@@ -31,6 +32,7 @@ public partial class App : Application
             Shutdown();
             return;
         }
+        started = true;
 
         DispatcherUnhandledException += (_, a) => Crash(a.Exception);
         AppDomain.CurrentDomain.UnhandledException += (_, a) => Crash(a.ExceptionObject);
@@ -48,9 +50,8 @@ public partial class App : Application
         Taskbar.Hide();
         shell = StartTrayHost(config.TrayOrder);
         var dock = new DockWindow(config) { Tray = shell?.NotificationArea };
-        MenuBarWindow bar = null!; // the settings callback runs only after this is assigned
-        Action openSettings = () => SettingsWindow.Open(config, dock, shell?.NotificationArea, bar);
-        bar = new MenuBarWindow(shell?.NotificationArea, config, dock, openSettings);
+        Action openSettings = () => SettingsWindow.Open(config, shell?.NotificationArea);
+        var bar = new MenuBarWindow(shell?.NotificationArea, config, dock, openSettings);
         bar.Show();
         dock.Show();
         SyncMonitors(config, openSettings);
@@ -80,7 +81,7 @@ public partial class App : Application
         }
         foreach (var device in add)
         {
-            var dock = new DockWindow(config, device);
+            var dock = new DockWindow(config, device) { Tray = shell?.NotificationArea };
             // No tray: the notification area's icons stay on the primary bar.
             var bar = new MenuBarWindow(null, config, dock, openSettings, device);
             secondaryBars[device] = (bar, dock);
@@ -94,7 +95,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        Teardown();
+        if (started) Teardown();
         base.OnExit(e);
     }
 
@@ -169,9 +170,9 @@ public partial class App : Application
         LightTheme = ReadLightTheme();
         // WindowBg is opaque: normal (non-layered) windows draw translucent backgrounds over black.
         var colors = LightTheme
-            ? new[] { "#B8F4F4F4", "#FF1C1C1C", "#F2F6F6F6", "#FF1C1C1C", "#22000000", "#1F000000", "#1FFFFFFF", "#40FFFFFF", "#FFFFFFFF", "#FFF1EFEE", "#FFF7F7F7", "#FF007AFF" }
-            : new[] { "#8C1E1E1E", "#FFF5F5F5", "#F22B2B2B", "#FFF0F0F0", "#FF3D4040", "#33FFFFFF", "#1F000000", "#40FFFFFF", "#FF222528", "#FF121617", "#FF292C2E", "#FF0A84FF" };
-        string[] keys = { "BarBg", "BarFg", "MenuBg", "MenuFg", "MenuBorder", "Hover", "DockBg", "DockBorder", "WindowBg", "PaneBg", "CardBg", "Accent" };
+            ? new[] { "#B8F4F4F4", "#FF1C1C1C", "#F2F6F6F6", "#FF1C1C1C", "#22000000", "#1F000000", "#FFFFFFFF", "#FFF1EFEE", "#FFF7F7F7", "#FF007AFF" }
+            : new[] { "#8C1E1E1E", "#FFF5F5F5", "#F22B2B2B", "#FFF0F0F0", "#FF3D4040", "#33FFFFFF", "#FF222528", "#FF121617", "#FF292C2E", "#FF0A84FF" };
+        string[] keys = { "BarBg", "BarFg", "MenuBg", "MenuFg", "MenuBorder", "Hover", "WindowBg", "PaneBg", "CardBg", "Accent" };
         for (var i = 0; i < keys.Length; i++)
         {
             var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(colors[i]));
@@ -190,10 +191,6 @@ public partial class App : Application
         Resources["ShelfRim"] = LightTheme
             ? Vertical(("#B3FFFFFF", 0), ("#1AFFFFFF", 0.3), ("#1AFFFFFF", 0.7), ("#8CFFFFFF", 1))
             : Vertical(("#A6FFFFFF", 0), ("#14FFFFFF", 0.3), ("#14FFFFFF", 0.7), ("#59FFFFFF", 1));
-        // macOS lights the dock's rim from above: bright along the top edge, fading toward the bottom.
-        var rim = new LinearGradientBrush((Color)ColorConverter.ConvertFromString("#66FFFFFF"), (Color)ColorConverter.ConvertFromString("#1FFFFFFF"), 90);
-        rim.Freeze();
-        Resources["DockBorder"] = rim;
         ApplyBarBackground(barTransparent);
     }
 }

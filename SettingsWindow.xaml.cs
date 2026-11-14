@@ -21,26 +21,24 @@ public partial class SettingsWindow : Window
     const string TaskName = "Mindows";
 
     readonly Config config;
-    readonly DockWindow dock;
     readonly NotificationArea? tray;
-    readonly MenuBarWindow bar;
     bool syncing = true; // InitializeComponent coerces the slider to its minimum; that is not a user change
 
-    public static void Open(Config config, DockWindow dock, NotificationArea? tray, MenuBarWindow bar)
+    public static void Open(Config config, NotificationArea? tray)
     {
-        open ??= new SettingsWindow(config, dock, tray, bar);
+        open ??= new SettingsWindow(config, tray);
         open.Show();
         // The taskbar is hidden and the dock skips Mindows' windows, so restoring here is the only way back.
         if (open.WindowState == WindowState.Minimized) open.WindowState = WindowState.Normal;
         open.Activate();
     }
 
-    SettingsWindow(Config config, DockWindow dock, NotificationArea? tray, MenuBarWindow bar)
+    SettingsWindow(Config config, NotificationArea? tray)
     {
-        (this.config, this.dock, this.tray, this.bar) = (config, dock, tray, bar);
+        (this.config, this.tray) = (config, tray);
         InitializeComponent();
         Sync();
-        Activated += (_, _) => Sync(); // the dock's resize handle changes the size too
+        Activated += (_, _) => Sync(); // tray icons, desktops and the wallpaper change while the window is in the background
         Closed += (_, _) => open = null;
         SourceInitialized += (_, _) =>
         {
