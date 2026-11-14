@@ -76,6 +76,7 @@ iscc installer\Mindows.iss
   - 화면 보호기 시작: 지정한 화면 보호기를 실행하며, 지정하지 않았다면 기본 제공되는 빈 화면 보호기를 실행합니다.
   - 화면 보호기 비활성화: 포인터가 모서리에 머무는 동안 화면 보호기와 디스플레이 끄기를 막습니다.
   - 디스플레이를 잠자기 상태로 전환: 모니터를 끕니다 / 화면 잠금: Win+L과 같습니다.
+- 가상 데스크탑: 데스크탑 1~9로 바로 전환하는 단축키를 지정합니다. 기본값은 데스크탑 1~9 순서로 Ctrl+Alt+`,` `.` `/` `L` `;` `'` `P` `[` `]`입니다. 칸을 클릭한 뒤 원하는 조합을 누르면 저장되며, Esc는 취소, Backspace나 Delete는 지우기입니다. Ctrl, Alt, Win 중 하나 이상이 들어가야 하고, 이미 다른 데스크탑에 지정된 조합을 입력하면 기존 지정이 지워집니다. 다른 앱이 이미 등록한 조합이면 해당 행에 표시됩니다. 지금 없는 데스크탑의 단축키는 아무 동작도 하지 않습니다. 전환은 대상 데스크탑의 맨 위 창을 활성화하는 방식이며, 빈 데스크탑이면 Mindows의 보이지 않는 창을 그 데스크탑으로 옮겨 활성화합니다.
 
 설정은 `%APPDATA%\Mindows\config.json`에 저장되며, 다음 항목을 직접 편집할 수도 있습니다.
 
@@ -85,6 +86,7 @@ iscc installer\Mindows.iss
 - `DockAutoHide`: Dock 자동 가리기 사용 여부
 - `DockAutoHideAnimation`: 자동 가리기 시 미끄러지는 애니메이션 사용 여부
 - `HotCorners`: 왼쪽 위, 오른쪽 위, 왼쪽 아래, 오른쪽 아래 순서의 핫 코너. `Action`은 동작 이름(`None`, `MissionControl`, `ApplicationWindows`, `Desktop`, `NotificationCenter`, `Apps`, `QuickNote`, `StartScreenSaver`, `DisableScreenSaver`, `DisplaySleep`, `LockScreen`), `Modifiers`는 함께 눌러야 하는 키(`Control`, `Alt`, `Shift`, `Windows`를 쉼표로 구분)입니다.
+- `DesktopShortcuts`: 데스크탑 1~9 순서의 전환 단축키. `Modifiers`는 `HotCorners`와 같은 형식이고, `Key`는 WPF `Key` 이름(`D1`은 숫자 1, `OemComma`는 `,`, `None`은 지정 없음)입니다.
 
 오류가 발생하면 같은 폴더의 `crash.log`에 기록됩니다.
 

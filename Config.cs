@@ -18,6 +18,13 @@ public class HotCorner
     [JsonConverter(typeof(JsonStringEnumConverter))] public ModifierKeys Modifiers { get; set; }
 }
 
+public class DesktopShortcut
+{
+    [JsonConverter(typeof(JsonStringEnumConverter))] public ModifierKeys Modifiers { get; set; }
+    /// <summary>None: no shortcut.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))] public Key Key { get; set; }
+}
+
 public class Config
 {
     public const string AppsFolder = @"shell:AppsFolder\";
@@ -44,6 +51,11 @@ public class Config
     public int MaxTrayIcons { get; set; }
     /// <summary>Top-left, top-right, bottom-left, bottom-right.</summary>
     public HotCorner[] HotCorners { get; set; } = { new(), new(), new(), new() };
+    /// <summary>Switch to virtual desktop 1 through 9. By default Ctrl+Alt with , . / l ; ' p [ ].</summary>
+    public DesktopShortcut[] DesktopShortcuts { get; set; } = new[]
+    {
+        Key.OemComma, Key.OemPeriod, Key.OemQuestion, Key.L, Key.OemSemicolon, Key.OemQuotes, Key.P, Key.OemOpenBrackets, Key.OemCloseBrackets,
+    }.Select(k => new DesktopShortcut { Modifiers = ModifierKeys.Control | ModifierKeys.Alt, Key = k }).ToArray();
 
     public static Config Load()
     {
@@ -55,6 +67,7 @@ public class Config
                 loaded.MaxTrayIcons = Math.Max(loaded.MaxTrayIcons, 0);
                 loaded.HiddenTrayIcons ??= Array.Empty<string>();
                 if (loaded.HotCorners is not { Length: 4 } || loaded.HotCorners.Any(c => c is null)) loaded.HotCorners = new Config().HotCorners;
+                if (loaded.DesktopShortcuts is not { Length: 9 } || loaded.DesktopShortcuts.Any(s => s is null)) loaded.DesktopShortcuts = new Config().DesktopShortcuts;
                 return loaded;
             }
         }

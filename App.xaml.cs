@@ -56,6 +56,7 @@ public partial class App : Application
         SyncMonitors(config, openSettings);
         SystemEvents.DisplaySettingsChanged += (_, _) => Dispatcher.BeginInvoke(() => SyncMonitors(config, openSettings));
         HotCorners.Start(config);
+        VirtualDesktops.Start(config);
     }
 
     static App()

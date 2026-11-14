@@ -83,7 +83,7 @@ static class HotCorners
     };
 
     /// <summary>Windows key names, in the keyboard's order: Ctrl+Win+Alt+Shift.</summary>
-    static string Glyphs(ModifierKeys m) => string.Join("+", new[]
+    public static string Glyphs(ModifierKeys m) => string.Join("+", new[]
     {
         m.HasFlag(ModifierKeys.Control) ? "Ctrl" : null, m.HasFlag(ModifierKeys.Windows) ? "Win" : null,
         m.HasFlag(ModifierKeys.Alt) ? "Alt" : null, m.HasFlag(ModifierKeys.Shift) ? "Shift" : null,

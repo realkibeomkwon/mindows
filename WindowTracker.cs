@@ -17,13 +17,14 @@ static class WindowTracker
     static readonly HashSet<string> ShellFlyouts = new(StringComparer.OrdinalIgnoreCase) { "SearchHost.exe", "StartMenuExperienceHost.exe" };
     static readonly Dictionary<string, string> names = new(StringComparer.OrdinalIgnoreCase);
 
-    public static bool IsAppWindow(IntPtr h)
+    /// <param name="anyDesktop">Also windows on other virtual desktops, which Windows cloaks.</param>
+    public static bool IsAppWindow(IntPtr h, bool anyDesktop = false)
     {
         if (!IsWindowVisible(h) || GetWindow(h, GW_OWNER) != IntPtr.Zero) return false;
         var ex = (long)GetWindowLongPtr(h, GWL_EXSTYLE);
         if ((ex & WS_EX_APPWINDOW) == 0 && (ex & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) != 0) return false;
         // Cloaked: suspended UWP frames, windows on other virtual desktops.
-        if (DwmGetWindowAttribute(h, 14, out var cloaked, sizeof(int)) == 0 && cloaked != 0) return false;
+        if (!anyDesktop && DwmGetWindowAttribute(h, 14, out var cloaked, sizeof(int)) == 0 && cloaked != 0) return false;
         // WS_EX_APPWINDOW asks for a taskbar button even without a title (e.g. WPF windows with an empty Title).
         return ((ex & WS_EX_APPWINDOW) != 0 || GetWindowTextLength(h) > 0) && !ShellClasses.Contains(ClassName(h));
     }

@@ -134,6 +134,27 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- A shortcut field: shows the keys; clicking it records the next combination pressed. -->
+        <Style x:Key="KeyButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource MenuFg}"/>
+            <Setter Property="Width" Value="120"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Height="30" CornerRadius="6" Padding="10,0" BorderThickness="2"
+                                Background="{DynamicResource MenuBorder}" BorderBrush="Transparent">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <!-- The corner marks on the hot corners preview. -->
         <Style x:Key="CornerMark" TargetType="Path">
             <Setter Property="Fill" Value="White"/>
@@ -355,6 +376,15 @@
                     </Grid>
                 </Grid>
             </Border>
+        </TabItem>
+
+        <TabItem Header="가상 데스크탑" Tag="&#xE7C4;" Background="#007AFF">
+            <StackPanel>
+                <Border Style="{StaticResource Card}">
+                    <StackPanel x:Name="DesktopList"/>
+                </Border>
+                <TextBlock x:Name="DesktopCount" Opacity="0.6" Margin="2,0,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
         </TabItem>
     </TabControl>
 </Window>

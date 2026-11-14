@@ -99,7 +99,85 @@ public partial class SettingsWindow : Window
         WallpaperPreview.Source = Wallpaper();
         MaxTrayBox.Text = $"{config.MaxTrayIcons}";
         SyncTrayList();
+        SyncDesktopList();
         syncing = false;
+    }
+
+    /// <summary>One shortcut field per desktop number, kept whether or not that desktop exists right now.</summary>
+    void SyncDesktopList()
+    {
+        if (recording != null) return; // rebuilding would drop the field being recorded
+        DesktopList.Children.Clear();
+        for (var i = 0; i < 9; i++)
+        {
+            if (i > 0) DesktopList.Children.Add(new Border { Style = (Style)FindResource("RowLine") });
+            var label = $"데스크탑 {i + 1}";
+            var field = new Button { Style = (Style)FindResource("KeyButton"), Content = VirtualDesktops.Describe(config.DesktopShortcuts[i]), Tag = i };
+            System.Windows.Automation.AutomationProperties.SetName(field, label);
+            field.Click += DesktopShortcut_Click;
+            DockPanel.SetDock(field, Dock.Right);
+            var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            text.Children.Add(new TextBlock { Text = label });
+            if (VirtualDesktops.Failed[i])
+                text.Children.Add(new TextBlock
+                {
+                    Text = "다른 앱이 이미 사용 중인 단축키입니다.", FontSize = 11,
+                    Foreground = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFrom("#FF3B30")!,
+                });
+            var row = new DockPanel { Style = (Style)FindResource("Row") };
+            row.Children.Add(field);
+            row.Children.Add(text);
+            DesktopList.Children.Add(row);
+        }
+        DesktopCount.Text = $"현재 데스크탑은 {Math.Max(VirtualDesktops.List().Length, 1)}개입니다. Ctrl+Win+D로 새 데스크탑을 추가할 수 있습니다.";
+    }
+
+    Button? recording;
+
+    /// <summary>
+    /// Records the next combination pressed on the field: Esc cancels, Backspace or Delete clears it. Mindows lets go of its
+    /// shortcuts meanwhile, or pressing one would switch desktops instead of reaching the field.
+    /// </summary>
+    void DesktopShortcut_Click(object sender, RoutedEventArgs e)
+    {
+        if (recording != null) return;
+        var field = recording = (Button)sender;
+        var i = (int)field.Tag;
+        VirtualDesktops.Apply(register: false);
+        field.Content = "키 입력…";
+        field.Focus();
+
+        void End(DesktopShortcut? set)
+        {
+            field.PreviewKeyDown -= OnKey;
+            field.LostKeyboardFocus -= OnLost;
+            recording = null;
+            if (set != null)
+            {
+                // One combination switches to one desktop, as on macOS.
+                if (set.Key != Key.None)
+                    foreach (var other in config.DesktopShortcuts.Where(o => o.Key == set.Key && o.Modifiers == set.Modifiers)) other.Key = Key.None;
+                config.DesktopShortcuts[i] = set;
+                config.Save();
+            }
+            VirtualDesktops.Apply();
+            SyncDesktopList();
+        }
+        void OnKey(object _, KeyEventArgs k)
+        {
+            k.Handled = true; // also keeps Enter and Space from clicking the field again
+            var key = k.Key switch { Key.System => k.SystemKey, Key.ImeProcessed => k.ImeProcessedKey, _ => k.Key };
+            var mods = Keyboard.Modifiers;
+            if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin) return;
+            if (mods == 0 && key == Key.Escape) End(null);
+            else if (mods == 0 && key is Key.Back or Key.Delete) End(new DesktopShortcut());
+            // Shift alone would take a key away from typing.
+            else if ((mods & (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Windows)) != 0) End(new DesktopShortcut { Modifiers = mods, Key = key });
+        }
+        // Clicking elsewhere or leaving the window cancels, and gives the shortcuts back.
+        void OnLost(object _, KeyboardFocusChangedEventArgs k) => End(null);
+        field.PreviewKeyDown += OnKey;
+        field.LostKeyboardFocus += OnLost;
     }
 
     /// <summary>One switch per tray icon the apps have added; icons switched off stay listed so they can be switched back on.</summary>
