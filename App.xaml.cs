@@ -183,14 +183,14 @@ public partial class App : Application
         var tagFg = new SolidColorBrush(LightTheme ? Colors.Black : Colors.White);
         tagFg.Freeze();
         Resources["TagFg"] = tagFg;
-        // Light glass is a faint white wash. Dark glass lays a charcoal veil over the same blur, so the shelf reads darker without hiding the wallpaper.
-        Resources["ShelfFill"] = LightTheme
-            ? Vertical(("#14FFFFFF", 0), ("#1AFFFFFF", 1))
-            : Vertical(("#40121617", 0), ("#6B121617", 1));
-        // The rim is lit from above. In the dark theme the lower edge is dimmer, so it does not turn the shelf milky.
+        // The shelf's colours are glisse's (github.com/0kzh/glisse, styles.css). The fill is its glass tint, --lg-glass:
+        // white in the light theme, rgb(40 40 40) in the dark one, at 15% instead of glisse's 60% so the wallpaper shows.
+        Resources["ShelfFill"] = Vertical((LightTheme ? "#26FFFFFF" : "#26282828", 0));
+        // The rim is white at --lg-rim-shine (0.3 light, 0.13 dark) on the top and bottom runs and falls back to the
+        // edge line, --lg-edge (8% black light, 8% white dark), on the straight sides.
         Resources["ShelfRim"] = LightTheme
-            ? Vertical(("#B3FFFFFF", 0), ("#1AFFFFFF", 0.3), ("#1AFFFFFF", 0.7), ("#8CFFFFFF", 1))
-            : Vertical(("#A6FFFFFF", 0), ("#14FFFFFF", 0.3), ("#14FFFFFF", 0.7), ("#59FFFFFF", 1));
+            ? Vertical(("#4DFFFFFF", 0), ("#14000000", 0.3), ("#14000000", 0.7), ("#4DFFFFFF", 1))
+            : Vertical(("#21FFFFFF", 0), ("#14FFFFFF", 0.3), ("#14FFFFFF", 0.7), ("#21FFFFFF", 1));
         ApplyBarBackground(barTransparent);
     }
 }
