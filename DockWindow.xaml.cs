@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -55,6 +56,7 @@ public partial class DockWindow : Window
     readonly AppBar bar;
     readonly ShelfBlur blur;
     readonly Slot separator, trash, search;
+    bool? lastTrashFull;
     // As on the taskbar: a plain Search icon, and a colored one while Search is open.
     ImageSource? searchOff = SearchIcon("Off"), searchOn = SearchIcon("On");
     bool searchIconsLight = App.LightTheme; // the theme the icons above were drawn for
@@ -375,8 +377,11 @@ public partial class DockWindow : Window
             if (!wanted.Any(s => Same(s.Key, w.App.Key)) && SlotFor(w.App.Key, w.App.Name, false, w.App.ExePath) is { } s) wanted.Add(s);
         if (wanted.Count > pinnedCount) wanted.Insert(pinnedCount, runningSeparator);
         runningSeparator.Line!.Visibility = wanted.Contains(runningSeparator) ? Visibility.Visible : Visibility.Collapsed;
-        if (trash.Img!.Source == null && IconLoader.TryGet(TrashKey, out var trashIcon)) trash.Img.Source = trashIcon;
-        if (trash.Img.Source != null) wanted.AddRange(new[] { separator, trash });
+        var rb = new SHQUERYRBINFO { cbSize = (uint)Marshal.SizeOf<SHQUERYRBINFO>() };
+        var trashFull = SHQueryRecycleBin(null, ref rb) == 0 ? rb.i64NumItems > 0 : lastTrashFull;
+        if (trashFull != lastTrashFull) { if (lastTrashFull != null) IconLoader.Reload(TrashKey); lastTrashFull = trashFull; }
+        if (IconLoader.TryGet(TrashKey, out var trashIcon) && trashIcon != null) trash.Img!.Source = trashIcon;
+        if (trash.Img!.Source != null) wanted.AddRange(new[] { separator, trash });
 
         foreach (var gone in slots.Except(wanted).Where(s => !s.Separator))
         {

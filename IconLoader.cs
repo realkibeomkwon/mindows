@@ -36,6 +36,14 @@ static class IconLoader
         return false;
     }
 
+    /// <summary>Loads the icon again in the background; the cached one stays until the new one arrives.</summary>
+    public static void Reload(string path)
+    {
+        if (!pending.Add(path)) return;
+        if (ui == null) StartLoader();
+        queue.Add(path);
+    }
+
     static void StartLoader()
     {
         var dispatcher = ui = Dispatcher.CurrentDispatcher;
