@@ -96,6 +96,21 @@ sealed class ShelfBlur
         UserPreferenceChangedEventHandler onPrefs = (_, _) => dock.Dispatcher.BeginInvoke(Apply);
         SystemEvents.UserPreferenceChanged += onPrefs;
         dock.Closed += (_, _) => SystemEvents.UserPreferenceChanged -= onPrefs;
+
+        // After sleep or a lock the backdrop can stay opaque white until DWM recomposes, so the glass is built anew.
+        PowerModeChangedEventHandler onPower = (_, e) => { if (e.Mode == PowerModes.Resume) dock.Dispatcher.BeginInvoke(Rebuild); };
+        SessionSwitchEventHandler onSession = (_, e) => { if (e.Reason is SessionSwitchReason.SessionUnlock or SessionSwitchReason.SessionLogon) dock.Dispatcher.BeginInvoke(Rebuild); };
+        SystemEvents.PowerModeChanged += onPower;
+        SystemEvents.SessionSwitch += onSession;
+        dock.Closed += (_, _) => { SystemEvents.PowerModeChanged -= onPower; SystemEvents.SessionSwitch -= onSession; };
+    }
+
+    void Rebuild()
+    {
+        if (hwnd == IntPtr.Zero) return;
+        DestroyWindow(hwnd);
+        (hwnd, applied) = (IntPtr.Zero, default);
+        Apply();
     }
 
     /// <summary>Follows the shelf, given in the dock's DIPs; also called while the dock slides, so it keeps the last shelf.</summary>
