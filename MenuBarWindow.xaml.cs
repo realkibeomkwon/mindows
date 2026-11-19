@@ -48,6 +48,8 @@ public partial class MenuBarWindow : Window
     IntPtr flyout;
     int? parkedY;  // the shell's own y for a flyout parked above the screen until its panel is found
     long parkedAt;
+    int? volumeX;   // screen x of the volume icon's centre while the sound flyout it opened is up
+    long volumeAt;
     IntPtr search; // Search's window, kept above the dock while closed
     long searchRetryAt; // when ReadySearch may capture Search again after a failed capture
 
@@ -272,6 +274,7 @@ public partial class MenuBarWindow : Window
         if (cls == "Windows.UI.Core.CoreWindow" && IsSearch(h)) search = h;
         else if (cls != "ControlCenterWindow") return; // Quick Settings
         flyout = h;
+        if (Environment.TickCount64 - volumeAt > 2000) volumeX = null; // not opened by the volume icon
         // The shell reuses the window, so last time's panel edge moves it at once; capturing takes a few frames.
         if (flyoutEdges.TryGetValue(h, out var edge)) MoveFlyout(h, edge);
         else
@@ -297,6 +300,7 @@ public partial class MenuBarWindow : Window
         if (!IsShown(flyout))
         {
             Unpark(); // closed before its panel was found; it must not reopen out of sight
+            volumeX = null;
             flyoutTimer.Stop();
             flyout = IntPtr.Zero;
             return;
@@ -334,7 +338,13 @@ public partial class MenuBarWindow : Window
         GetWindowRect(new WindowInteropHelper(this).Handle, out var bar);
         var gap = (int)Math.Round(FlyoutGap * PrimaryMonitor().scale);
         var y = h == search ? dock.ShelfTop - gap - edge : bar.Bottom + gap - edge;
-        if (y != r.Top) SetWindowPos(h, IntPtr.Zero, r.Left, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        var x = r.Left;
+        if (volumeX is { } anchor && h == flyout && h != search) // centre under the volume icon, kept on screen
+        {
+            var (screen, _) = PrimaryMonitor();
+            x = Math.Clamp(anchor - (r.Right - r.Left) / 2, screen.Left, screen.Right - (r.Right - r.Left));
+        }
+        if (y != r.Top || x != r.Left) SetWindowPos(h, IntPtr.Zero, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
     /// <summary>Where UsageBar, a separate app, publishes AI usage for the menu bar; its README has the format.</summary>
@@ -625,6 +635,15 @@ public partial class MenuBarWindow : Window
             e.Handled = true;
             return;
         }
+        // The shell's own click opens the whole Quick Settings; Win+Ctrl+V opens just the sound output page.
+        if (e.ChangedButton == MouseButton.Left && icon.GUID == new Guid(NotificationArea.VOLUME_GUID))
+        {
+            var element = (FrameworkElement)sender;
+            (volumeX, volumeAt) = ((int)element.PointToScreen(new Point(element.ActualWidth / 2, 0)).X, Environment.TickCount64);
+            Sys.WinKey('V', ctrl: true);
+            e.Handled = true;
+            return;
+        }
         AllowSetForegroundWindow(uint.MaxValue); // ASFW_ANY: the app's window or menu would otherwise stay behind
         icon.IconMouseDown(e.ChangedButton, MouseHelper.GetCursorPositionParam(), GetDoubleClickTime());
         e.Handled = true;
@@ -632,6 +651,7 @@ public partial class MenuBarWindow : Window
 
     void Tray_MouseUp(object sender, MouseButtonEventArgs e)
     {
+        if (e.ChangedButton == MouseButton.Left && TrayIcon(sender)?.GUID == new Guid(NotificationArea.VOLUME_GUID)) { e.Handled = true; return; } // handled on mouse down
         AllowSetForegroundWindow(uint.MaxValue);
         TrayIcon(sender)?.IconMouseUp(e.ChangedButton, MouseHelper.GetCursorPositionParam(), GetDoubleClickTime());
         MoveMenuBelowBar();
@@ -759,7 +779,11 @@ public partial class MenuBarWindow : Window
     }
 
     void Battery_Click(object sender, RoutedEventArgs e) => Sys.Launch("ms-settings:batterysaver");
-    void Control_Click(object sender, RoutedEventArgs e) => Sys.WinKey('A');
+    void Control_Click(object sender, RoutedEventArgs e)
+    {
+        volumeX = null;
+        Sys.WinKey('A');
+    }
     void Clock_Click(object sender, RoutedEventArgs e) => Sys.WinKey('N');
 }
 

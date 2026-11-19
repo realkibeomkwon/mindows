@@ -61,14 +61,16 @@ static class Sys
 
     public static void Close(IntPtr h) => PostMessage(h, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
 
-    /// <summary>Presses Win+key, e.g. N for notifications, A for quick settings, S for search.</summary>
-    public static void WinKey(char key)
+    /// <summary>Presses Win+key (Win+Ctrl+key with ctrl), e.g. N for notifications, A for quick settings, S for search, Ctrl+V for sound output.</summary>
+    public static void WinKey(char key, bool ctrl = false)
     {
-        const byte LWin = 0x5B;
+        const byte LWin = 0x5B, LCtrl = 0xA2;
         const uint Up = 2;
         keybd_event(LWin, 0, 0, UIntPtr.Zero);
+        if (ctrl) keybd_event(LCtrl, 0, 0, UIntPtr.Zero);
         keybd_event((byte)key, 0, 0, UIntPtr.Zero);
         keybd_event((byte)key, 0, Up, UIntPtr.Zero);
+        if (ctrl) keybd_event(LCtrl, 0, Up, UIntPtr.Zero);
         keybd_event(LWin, 0, Up, UIntPtr.Zero);
     }
 
