@@ -74,6 +74,17 @@
             </Setter>
         </Style>
 
+        <!-- A menu entry that shows only its Header, for panels with their own controls (BatteryPanel). -->
+        <Style x:Key="PanelItem" TargetType="MenuItem">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <ContentPresenter ContentSource="Header"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Separators inside menus use this key, not the implicit Separator style: 11 high with a 1 px line. -->
         <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator">
             <Setter Property="Template">

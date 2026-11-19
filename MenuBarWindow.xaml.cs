@@ -778,7 +778,9 @@ public partial class MenuBarWindow : Window
         Menus.Show(WindowButton, PlacementMode.Bottom, items);
     }
 
-    void Battery_Click(object sender, RoutedEventArgs e) => Sys.Launch("ms-settings:batterysaver");
+    // Centred under the icon, like the sound output flyout.
+    void Battery_Click(object sender, RoutedEventArgs e) =>
+        Menus.Show(BatteryButton, PlacementMode.Bottom, new Control?[] { BatteryPanel.Item() }, (BatteryButton.ActualWidth - 288) / 2);
     void Control_Click(object sender, RoutedEventArgs e)
     {
         volumeX = null;
