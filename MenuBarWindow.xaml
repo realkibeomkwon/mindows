@@ -193,11 +193,18 @@
             </Button>
             <Button x:Name="BatteryButton" Style="{StaticResource BarButton}" Click="Battery_Click">
                 <StackPanel Orientation="Horizontal">
-                    <Border Width="23" Height="11" BorderThickness="1" CornerRadius="3" Padding="1.5"
-                            BorderBrush="{DynamicResource BarFg}" VerticalAlignment="Center">
-                        <Border x:Name="BatteryFill" HorizontalAlignment="Left" CornerRadius="1.5"
-                                Background="{DynamicResource BarFg}"/>
-                    </Border>
+                    <Grid VerticalAlignment="Center">
+                        <Border Width="23" Height="11" BorderThickness="1" CornerRadius="3" Padding="1.5"
+                                BorderBrush="{DynamicResource BarFg}">
+                            <Border x:Name="BatteryFill" HorizontalAlignment="Left" CornerRadius="1.5"
+                                    Background="{DynamicResource BarFg}"/>
+                        </Border>
+                        <!-- Shown while the AC line is plugged in; yellow with a dark edge so it reads over both the fill and the empty part. -->
+                        <Path x:Name="BatteryBolt" Visibility="Collapsed" Width="9" Height="17" Stretch="Fill"
+                              HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"
+                              Fill="#FFE600" Stroke="#CC000000" StrokeThickness="0.8" StrokeLineJoin="Round"
+                              Data="M3.8,0 L0.4,5.4 L2.5,5.4 L1.9,9 L5.6,3.4 L3.4,3.4 Z"/>
+                    </Grid>
                     <Border Width="1.5" Height="4" Margin="1,0,0,0" CornerRadius="0,1,1,0" Opacity="0.6"
                             Background="{DynamicResource BarFg}" VerticalAlignment="Center"/>
                     <TextBlock x:Name="BatteryText" Margin="6,0,0,0" VerticalAlignment="Center"/>
