@@ -79,7 +79,8 @@
                     Content="&#xE712;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12"
                     AutomationProperties.Name="더 보기" Click="TrayOverflow_Click"/>
             <!-- AI usage from UsageBar, a separate app: each provider's mark and the percentage left; clicks open its popup. -->
-            <ItemsControl x:Name="UsageItems" VerticalAlignment="Stretch">
+            <ItemsControl x:Name="UsageItems" VerticalAlignment="Stretch" MouseMove="UsageItems_MouseMove"
+                          MouseLeftButtonUp="UsageItems_MouseUp" LostMouseCapture="UsageItems_LostMouseCapture">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <StackPanel Orientation="Horizontal"/>
@@ -87,7 +88,8 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Button Style="{StaticResource BarButton}" Click="Usage_Click" ToolTip="{Binding Tip}" Opacity="{Binding Opacity}">
+                        <Button Style="{StaticResource BarButton}" Click="Usage_Click" PreviewMouseLeftButtonDown="Usage_MouseDown"
+                                ToolTip="{Binding Tip}" Opacity="{Binding Opacity}">
                             <StackPanel Orientation="Horizontal">
                                 <Path Data="{Binding Logo}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource BarFg}"
                                       VerticalAlignment="Center"/>

@@ -48,7 +48,7 @@ iscc installer\Mindows.iss
 - 윈도우 메뉴: 최소화, 확대/축소, 닫기, 앱의 창 목록
 - 오른쪽: 트레이 아이콘, 한/영 표시, 네트워크, 배터리, 빠른 설정(Win+A), 시계(Win+N 알림 센터)
 - 트레이 아이콘: Mindows가 알림 영역 호스트 역할을 맡아([ManagedShell](https://github.com/cairoshell/ManagedShell)), 앱의 트레이 아이콘을 메뉴 바에 표시합니다. 클릭과 우클릭은 해당 앱으로 전달됩니다. 네트워크와 볼륨 아이콘은 시계 쪽에 고정됩니다.
-- AI 사용량: 별도 앱인 [UsageBar](../usagebar)가 실행 중이면, 트레이 아이콘 왼쪽에 공급자(Claude, Codex, Grok)별 로고와 남은 사용량(%)을 표시합니다. 마지막 갱신에 실패한 항목은 흐리게 표시되며, 항목을 클릭하면 UsageBar의 상세 팝업이 열립니다. 이때 UsageBar 자체의 트레이 아이콘은 메뉴 바에 표시하지 않습니다.
+- AI 사용량: 별도 앱인 [UsageBar](../usagebar)가 실행 중이면, 트레이 아이콘 왼쪽에 공급자(Claude, Codex, Grok)별 로고와 남은 사용량(%)을 표시합니다. 마지막 갱신에 실패한 항목은 흐리게 표시되며, 항목을 클릭하면 UsageBar의 상세 팝업이 열립니다. Ctrl을 누른 채 항목을 끌면 UsageBar 항목끼리 순서가 바뀝니다. 이때 UsageBar 자체의 트레이 아이콘은 메뉴 바에 표시하지 않습니다.
 
 **Dock**
 - 검색(Win+S), 고정 앱과 실행 중인 앱, 실행 표시 점, 알림 배지, 휴지통
@@ -89,6 +89,7 @@ iscc installer\Mindows.iss
 - `DockAutoHideAnimation`: 자동 가리기 시 미끄러지는 애니메이션 사용 여부
 - `MenuBarTransparent`: 메뉴 바 배경을 투명하게 할지 여부
 - `TrayOrder`: 메뉴 바에 놓이는 순서대로 나열한 트레이 아이콘 식별자. `null`이면 네트워크와 볼륨만 시계 옆에 고정됩니다.
+- `UsageOrder`: 메뉴 바에 놓이는 순서대로 나열한 UsageBar 공급자 id. 여기에 없는 공급자는 그 뒤에 UsageBar의 순서대로 놓입니다.
 - `HiddenTrayIcons`: 설정에서 끈 트레이 아이콘의 식별자
 - `MaxTrayIcons`: 메뉴 바에 표시할 트레이 아이콘의 최대 개수(0은 제한 없음)
 - `HotCorners`: 왼쪽 위, 오른쪽 위, 왼쪽 아래, 오른쪽 아래 순서의 핫 코너. `Action`은 동작 이름(`None`, `MissionControl`, `ApplicationWindows`, `Desktop`, `NotificationCenter`, `Apps`, `QuickNote`, `StartScreenSaver`, `DisableScreenSaver`, `DisplaySleep`, `LockScreen`), `Modifiers`는 함께 눌러야 하는 키(`Control`, `Alt`, `Shift`, `Windows`를 쉼표로 구분)입니다.

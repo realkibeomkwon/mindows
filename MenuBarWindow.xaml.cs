@@ -35,6 +35,8 @@ public partial class MenuBarWindow : Window
     readonly DockWindow dock;
     readonly NotificationArea? tray;
     NotifyIcon? movingIcon; // tray icon being Ctrl+dragged to a new spot
+    UsageItem? movingUsage; // UsageBar item being Ctrl+dragged to a new spot
+    ObservableCollection<UsageItem> usageItems = new();
     readonly ObservableCollection<NotifyIcon> shownIcons = new(); // the tray icons in the bar
     List<NotifyIcon> overflowIcons = new(); // the ones beyond Config.MaxTrayIcons, in the overflow menu
     ListCollectionView? trayView;
@@ -59,6 +61,8 @@ public partial class MenuBarWindow : Window
         Debug.Assert(string.Join(",", MoveBefore(order, "b", "a")) == "new,b,a,hidden"
             && string.Join(",", MoveBefore(order, "a", null)) == "new,hidden,B,a",
             "a moved tray icon must land before its new neighbor without moving icons that aren't shown");
+        Debug.Assert(string.Join(",", MoveUsage(new[] { "c", "gone", "a" }, new[] { "c", "b", "a" }, "b", "c")) == "b,c,gone,a",
+            "a moved usage item must land before its new neighbor, and a provider not shown keep its place");
     }
 
     public static readonly List<MenuBarWindow> All = new(); // one per monitor; settings apply to each
@@ -352,7 +356,8 @@ public partial class MenuBarWindow : Window
     JsonNode? usage;
     DateTime usageWrite;
 
-    sealed record UsageItem(int Index, Geometry? Logo, string Text, string Tip, double Opacity);
+    /// <summary>Index is the provider's place in UsageBar's file, which its popup message refers to, not its place in the bar.</summary>
+    sealed record UsageItem(int Index, string Id, Geometry? Logo, string Text, string Tip, double Opacity);
 
     /// <summary>An item per provider in UsageBar's file: its mark and the percentage left, dimmed when its last refresh failed.</summary>
     void UpdateUsage()
@@ -360,12 +365,12 @@ public partial class MenuBarWindow : Window
         var write = File.GetLastWriteTimeUtc(UsagePath); // 1601 when there is none
         // UsageBar rewrites it every 5 minutes and deletes it on exit; an older one was left behind by a crash.
         if (DateTime.UtcNow - write > TimeSpan.FromMinutes(15)) write = default;
-        if (write == usageWrite) return;
+        if (write == usageWrite || movingUsage != null) return; // a rebuild mid-drag would lose the dragged item; read it after the drop
         List<UsageItem>? items = null;
         try
         {
             usage = write == default ? null : JsonNode.Parse(File.ReadAllText(UsagePath));
-            items = usage?["providers"]?.AsArray().Select((p, i) => p == null ? null : new UsageItem(i, Logo((string?)p["logo"]),
+            items = usage?["providers"]?.AsArray().Select((p, i) => p == null ? null : new UsageItem(i, (string?)p["id"] ?? "", Logo((string?)p["logo"]),
                     p["remainingPercent"] is { } left ? $"{(double)left:0}%" : "–",
                     $"{p["name"]}: {(string?)p["error"] ?? (p["remainingPercent"] is { } l ? $"{(double)l:0}% 남음" : "사용량 없음")}",
                     p["error"] == null ? 1 : 0.5))
@@ -374,7 +379,48 @@ public partial class MenuBarWindow : Window
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return; } // being replaced or deleted; read it on the next tick
         catch (Exception e) when (e is JsonException or InvalidOperationException or FormatException) { usage = null; } // not UsageBar's format
         usageWrite = write;
-        UsageItems.ItemsSource = items;
+        // A stable sort: providers missing from the saved order keep UsageBar's order after the ones in it.
+        UsageItems.ItemsSource = usageItems = new((items ?? new()).OrderBy(i => Array.IndexOf(config.UsageOrder, i.Id) is var at and >= 0 ? at : int.MaxValue));
+    }
+
+    /// <summary>The saved order with the shown providers it lacks added, then id moved before next; providers not shown now keep their place.</summary>
+    static string[] MoveUsage(string[] saved, IEnumerable<string> shown, string id, string? next) =>
+        MoveBefore(saved.Concat(shown.Where(s => !saved.Contains(s))), id, next);
+
+    void Usage_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        // As with the tray icons, Ctrl+drag moves the item instead of opening its popup.
+        if (!CtrlDown || ((FrameworkElement)sender).DataContext is not UsageItem item) return;
+        movingUsage = item;
+        UsageItems.CaptureMouse(); // not the item's own button, which a move takes out of the tree
+        e.Handled = true; // keeps the button from pressing, so no Click
+    }
+
+    /// <summary>Moves the dragged item before the first other item right of the pointer.</summary>
+    void UsageItems_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (movingUsage is not { } moving) return;
+        var x = e.GetPosition(UsageItems).X;
+        var next = usageItems.FirstOrDefault(i => i != moving && UsageItems.ItemContainerGenerator.ContainerFromItem(i) is FrameworkElement c
+            && c.TranslatePoint(new Point(c.ActualWidth / 2, 0), UsageItems).X > x);
+        var from = usageItems.IndexOf(moving);
+        var to = next == null ? usageItems.Count - 1 : usageItems.IndexOf(next) - (from < usageItems.IndexOf(next) ? 1 : 0);
+        if (to != from) usageItems.Move(from, to);
+    }
+
+    void UsageItems_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (movingUsage != null) UsageItems.ReleaseMouseCapture(); // ends the move in LostMouseCapture
+    }
+
+    void UsageItems_LostMouseCapture(object sender, MouseEventArgs e)
+    {
+        if (movingUsage is not { } moving) return;
+        movingUsage = null;
+        var next = usageItems.ElementAtOrDefault(usageItems.IndexOf(moving) + 1);
+        config.UsageOrder = MoveUsage(config.UsageOrder, usageItems.Select(i => i.Id), moving.Id, next?.Id);
+        config.Save();
+        foreach (var bar in All) bar.usageWrite = default; // every monitor's bar re-sorts on its next tick
     }
 
     static Geometry? Logo(string? data)

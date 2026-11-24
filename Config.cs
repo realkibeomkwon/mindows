@@ -45,6 +45,8 @@ public class Config
     public bool DockAutoHideAnimation { get; set; } = true;
     /// <summary>Tray icon identifiers in menu bar order, set by Ctrl+dragging; null keeps network and volume next to the clock.</summary>
     public string[]? TrayOrder { get; set; }
+    /// <summary>UsageBar provider ids in menu bar order, set by Ctrl+dragging; providers not in it follow in UsageBar's order.</summary>
+    public string[] UsageOrder { get; set; } = Array.Empty<string>();
     /// <summary>Identifiers of the tray icons switched off in settings.</summary>
     public string[] HiddenTrayIcons { get; set; } = Array.Empty<string>();
     /// <summary>Most tray icons shown in the menu bar, the rest sit in the overflow menu; 0 shows all.</summary>
