@@ -334,8 +334,8 @@ public partial class DockWindow : Window
         s.Dot.SetResourceReference(Shape.FillProperty, "MenuFg");
         s.Badge = new Border
         {
-            Background = new SolidColorBrush(Color.FromRgb(0xFF, 0x3B, 0x30)), Visibility = Visibility.Collapsed, IsHitTestVisible = false,
-            Child = new TextBlock { Foreground = Brushes.White, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
+            Background = new SolidColorBrush(Color.FromRgb(0xEA, 0x4B, 0x45)), Visibility = Visibility.Collapsed, IsHitTestVisible = false, // red sampled from an iOS 26 home screen
+            Child = new TextBlock { Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
         };
         Panel.SetZIndex(s.Badge, 50);
         Root.Children.Add(s.Img);
@@ -527,17 +527,18 @@ public partial class DockWindow : Window
                 s.Dot!.Width = s.Dot.Height = dot;
                 Canvas.SetLeft(s.Dot, Math.Round((sx + gap + s.Size / 2 - dot / 2) * scale) / scale);
                 Canvas.SetTop(s.Dot, Math.Round((height - BottomMargin - 6 - dot / 2) * scale) / scale); // centre 6 DIP above the shelf's bottom edge
-                // Top-right corner of the icon, growing with it; a wider count stretches the pill to the left.
+                // Proportions measured from iOS 26 home-screen badges: height 0.38 of the icon, overhanging its top and right
+                // edges by 0.44 of that height, digits 0.43 of it tall; a wider count stretches the pill to the left.
                 var b = s.Badge!;
                 b.Visibility = s.Count != 0 && s != dragged ? Visibility.Visible : Visibility.Collapsed;
-                var bh = s.Size * 0.34;
+                var bh = s.Size * 0.38;
                 var text = (TextBlock)b.Child;
-                text.FontSize = bh * 0.68;
+                text.FontSize = bh * 0.62;
                 text.Margin = new Thickness(0, 0, 0, 2 * InkDrop(text) * text.FontSize); // lifts the digits by their drop, so their ink is centred in the circle
                 text.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
                 var bw = Math.Max(bh, text.DesiredSize.Width + bh * 0.5);
                 b.CornerRadius = new CornerRadius(bh / 2);
-                Place(b, sx + gap + s.Size - bw + bh * 0.25, Canvas.GetTop(s.Img) - bh * 0.25, bw, bh);
+                Place(b, sx + gap + s.Size - bw + bh * 0.44, Canvas.GetTop(s.Img) - bh * 0.44, bw, bh);
             }
             x += SlotWidth(s);
         }
