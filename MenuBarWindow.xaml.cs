@@ -457,7 +457,9 @@ public partial class MenuBarWindow : Window
         BatteryButton.Visibility = hasBattery ? Visibility.Visible : Visibility.Collapsed;
         if (hasBattery)
         {
-            BatteryBolt.Visibility = (power.BatteryFlag & 8) != 0 ? Visibility.Visible : Visibility.Collapsed;
+            // Windows drops the charging flag at 100% while still on AC, so keep the bolt there too.
+            var charging = (power.BatteryFlag & 8) != 0 || power.ACLineStatus == 1 && power.BatteryLifePercent >= 100;
+            BatteryBolt.Visibility = charging ? Visibility.Visible : Visibility.Collapsed;
             BatteryText.Text = $"{power.BatteryLifePercent}%";
             BatteryFill.Width = 17 * power.BatteryLifePercent / 100.0;
             BatteryFill.Background = power.ACLineStatus == 1 ? Brushes.LimeGreen

@@ -44,7 +44,7 @@ public partial class BatteryPanel : UserControl
 
         State.Text = charging ? "충전 중" : !onAc ? "배터리 사용 중" : percent >= 100 ? "완충됨" : "전원 연결됨";
         Percent.Text = percent.ToString();
-        Bolt.Visibility = charging ? Visibility.Visible : Visibility.Collapsed;
+        Bolt.Visibility = charging || onAc && percent >= 100 ? Visibility.Visible : Visibility.Collapsed;
         Fill.Width = TrackWidth * percent / 100.0;
         Fill.Background = onAc ? Brushes.LimeGreen : percent <= 20 ? Brushes.OrangeRed : (Brush)FindResource("MenuFg");
         Source.Text = onAc ? "전원 어댑터" : "배터리";
