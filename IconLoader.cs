@@ -156,9 +156,63 @@ static class IconLoader
         }
 
         var format = AlphaFormat(pixels);
+        if (GlyphTone(pixels) is byte tone)
+            FillHoles(pixels, bm.bmWidth, height, stride, tone < 128 ? (byte)255 : (byte)0, format == PixelFormats.Pbgra32);
         var src = BitmapSource.Create(bm.bmWidth, height, 96, 96, format, null, pixels, stride);
         src.Freeze();
         return src;
+    }
+
+    /// <summary>
+    /// Packaged apps with a transparent tile color (ChatGPT) ship only a single-tone glyph, whose holes show the dock through.
+    /// Returns the glyph's gray level when every opaque pixel shares it and some pixels are fully clear.
+    /// </summary>
+    static byte? GlyphTone(byte[] bgra)
+    {
+        int tone = -1;
+        bool clear = false;
+        for (var i = 0; i < bgra.Length; i += 4)
+        {
+            var a = bgra[i + 3];
+            if (a == 0) { clear = true; continue; }
+            if (a != 255) continue; // anti-aliased edges, premultiplied or not
+            var r = bgra[i + 2];
+            if (bgra[i] != r || bgra[i + 1] != r || (tone >= 0 && r != tone)) return null;
+            tone = r;
+        }
+        return clear && tone >= 0 ? (byte)tone : null;
+    }
+
+    /// <summary>
+    /// Fills the clear areas the glyph encloses with a contrasting color, so the dock no longer shows through them.
+    /// The area outside the glyph stays clear; fully opaque pixels are the wall the outside flood stops at.
+    /// </summary>
+    static void FillHoles(byte[] bgra, int w, int h, int stride, byte fill, bool premultiplied)
+    {
+        var outside = new bool[w * h];
+        var stack = new Stack<int>();
+        for (var x = 0; x < w; x++) { stack.Push(x); stack.Push((h - 1) * w + x); }
+        for (var y = 0; y < h; y++) { stack.Push(y * w); stack.Push(y * w + w - 1); }
+        while (stack.Count > 0)
+        {
+            var p = stack.Pop();
+            int x = p % w, y = p / w;
+            if (outside[p] || bgra[y * stride + x * 4 + 3] == 255) continue;
+            outside[p] = true;
+            if (x > 0) stack.Push(p - 1);
+            if (x < w - 1) stack.Push(p + 1);
+            if (y > 0) stack.Push(p - w);
+            if (y < h - 1) stack.Push(p + w);
+        }
+        for (var p = 0; p < outside.Length; p++)
+        {
+            int i = p / w * stride + p % w * 4, a = bgra[i + 3];
+            if (outside[p] || a == 255) continue;
+            // The glyph's anti-aliased inner edge composited over the fill color.
+            for (var c = 0; c < 3; c++)
+                bgra[i + c] = (byte)(((premultiplied ? bgra[i + c] * 255 : bgra[i + c] * a) + fill * (255 - a)) / 255);
+            bgra[i + 3] = 255;
+        }
     }
 
     /// <summary>
