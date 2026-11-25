@@ -176,5 +176,14 @@ sealed class ShelfBlur
         clip = compositor.CreateRoundedRectangleGeometry();
         glass.Clip = compositor.CreateGeometricClip(clip);
         target.Root = glass;
+
+        // shortcut: the backdrop seems to be re-sampled only while this tree changes, so an endless imperceptible fade keeps
+        // DWM recomposing the glass; costs a little GPU, replace if the cause turns out to be the z-order against the dock.
+        var fade = compositor.CreateScalarKeyFrameAnimation();
+        fade.InsertKeyFrame(0.5f, 0.999f);
+        fade.InsertKeyFrame(1f, 1f);
+        fade.Duration = TimeSpan.FromSeconds(1);
+        fade.IterationBehavior = Comp.AnimationIterationBehavior.Forever;
+        glass.StartAnimation("Opacity", fade);
     }
 }
