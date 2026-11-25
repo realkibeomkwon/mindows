@@ -108,6 +108,9 @@ sealed class ShelfBlur
     void Rebuild()
     {
         if (hwnd == IntPtr.Zero) return;
+        target?.Dispose(); // the old compositor and its target would otherwise stay alive for good
+        compositor?.Dispose();
+        (target, compositor) = (null, null);
         DestroyWindow(hwnd);
         (hwnd, applied) = (IntPtr.Zero, default);
         Apply();
