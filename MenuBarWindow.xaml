@@ -78,6 +78,8 @@
             <Button x:Name="TrayOverflow" Style="{StaticResource BarButton}" Padding="8,0" Visibility="Collapsed"
                     Content="&#xE712;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12"
                     AutomationProperties.Name="더 보기" Click="TrayOverflow_Click"/>
+            <!-- Binance BTC/USDT from BtcTicker; hidden while offline. -->
+            <TextBlock x:Name="Btc" Visibility="Collapsed" Margin="9,0" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular"><Run Text="BTC/USDT "/><Run x:Name="BtcPrice"/><Run Text=" "/><Run x:Name="BtcChange"/></TextBlock>
             <!-- AI usage from UsageBar, a separate app: each provider's mark and the percentage left; clicks open its popup. -->
             <ItemsControl x:Name="UsageItems" VerticalAlignment="Stretch" MouseMove="UsageItems_MouseMove"
                           MouseLeftButtonUp="UsageItems_MouseUp" LostMouseCapture="UsageItems_LostMouseCapture">

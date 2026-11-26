@@ -120,8 +120,13 @@ public partial class MenuBarWindow : Window
         var imeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
         imeTimer.Tick += (_, _) => UpdateIme();
         imeTimer.Start();
+        Action onBtc = () => Dispatcher.BeginInvoke(UpdateBtc);
+        BtcTicker.Changed += onBtc;
+        BtcTicker.Start();
+        UpdateBtc();
         Closed += (_, _) =>
         {
+            BtcTicker.Changed -= onBtc;
             All.Remove(this);
             timer.Stop();
             imeTimer.Stop();
@@ -129,6 +134,16 @@ public partial class MenuBarWindow : Window
             Microsoft.Win32.SystemEvents.UserPreferenceChanged -= onPrefs;
             NetworkChange.NetworkAddressChanged -= onNetwork;
         };
+    }
+
+    void UpdateBtc()
+    {
+        if (BtcTicker.Latest is not var (price, percent)) { Btc.Visibility = Visibility.Collapsed; return; }
+        percent = Math.Round(percent, 2);
+        BtcPrice.Text = price.ToString("N2", CultureInfo.InvariantCulture);
+        BtcChange.Text = percent.ToString("+0.00;-0.00;0.00", CultureInfo.InvariantCulture) + "%";
+        BtcPrice.Foreground = BtcChange.Foreground = percent > 0 ? Brushes.LimeGreen : percent < 0 ? Brushes.Red : (Brush)FindResource("BarFg");
+        Btc.Visibility = Visibility.Visible;
     }
 
     /// <summary>The taskbar's input indicator for the Korean IME in the foreground app: 한 in Hangul mode, A otherwise.</summary>
