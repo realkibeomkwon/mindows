@@ -242,6 +242,12 @@
                                   AutomationProperties.Name="로그인 시 자동 실행" Click="LaunchAtLogin_Click"/>
                         <TextBlock Text="로그인 시 자동 실행" VerticalAlignment="Center"/>
                     </DockPanel>
+                    <Border Style="{StaticResource RowLine}"/>
+                    <DockPanel Style="{StaticResource Row}">
+                        <CheckBox x:Name="ShowBtcTicker" DockPanel.Dock="Right" Style="{StaticResource Switch}"
+                                  AutomationProperties.Name="BTC/USDT 표시" Click="ShowBtcTicker_Click"/>
+                        <TextBlock Text="BTC/USDT 표시" VerticalAlignment="Center"/>
+                    </DockPanel>
                 </StackPanel>
             </Border>
         </TabItem>

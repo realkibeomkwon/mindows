@@ -122,7 +122,7 @@ public partial class MenuBarWindow : Window
         imeTimer.Start();
         Action onBtc = () => Dispatcher.BeginInvoke(UpdateBtc);
         BtcTicker.Changed += onBtc;
-        BtcTicker.Start();
+        if (config.ShowBtcTicker) BtcTicker.Start();
         UpdateBtc();
         Closed += (_, _) =>
         {
@@ -136,9 +136,9 @@ public partial class MenuBarWindow : Window
         };
     }
 
-    void UpdateBtc()
+    public void UpdateBtc()
     {
-        if (BtcTicker.Latest is not var (price, percent)) { Btc.Visibility = Visibility.Collapsed; return; }
+        if (!config.ShowBtcTicker || BtcTicker.Latest is not var (price, percent)) { Btc.Visibility = Visibility.Collapsed; return; }
         percent = Math.Round(percent, 2);
         BtcPrice.Text = price.ToString("N2", CultureInfo.InvariantCulture);
         BtcChange.Text = percent.ToString("+0.00;-0.00;0.00", CultureInfo.InvariantCulture) + "%";

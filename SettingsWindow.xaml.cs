@@ -92,6 +92,7 @@ public partial class SettingsWindow : Window
         AutoHide.IsChecked = config.DockAutoHide;
         AutoHideAnimation.IsChecked = config.DockAutoHideAnimation;
         MenuBarTransparent.IsChecked = config.MenuBarTransparent;
+        ShowBtcTicker.IsChecked = config.ShowBtcTicker;
         Translucency.IsChecked = WindowsTransparency(); // the setting is Windows' own, so the switch mirrors it
         for (var i = 0; i < 4; i++) CornerButtons[i].Content = HotCorners.Describe(config.HotCorners[i].Action, config.HotCorners[i].Modifiers);
         WallpaperPreview.Source = Wallpaper();
@@ -395,6 +396,14 @@ public partial class SettingsWindow : Window
         try { SendMessageTimeout((IntPtr)0xFFFF, 0x1A /* WM_SETTINGCHANGE */, IntPtr.Zero, area, 2 /* SMTO_ABORTIFHUNG */, 1000, out _); }
         finally { System.Runtime.InteropServices.Marshal.FreeHGlobal(area); }
         ApplyBackdrop();
+    }
+
+    void ShowBtcTicker_Click(object sender, RoutedEventArgs e)
+    {
+        config.ShowBtcTicker = ShowBtcTicker.IsChecked == true;
+        config.Save();
+        if (config.ShowBtcTicker) BtcTicker.Start(); else BtcTicker.Stop();
+        foreach (var b in MenuBarWindow.All) b.UpdateBtc();
     }
 
     void MenuBarTransparent_Click(object sender, RoutedEventArgs e)

@@ -40,6 +40,8 @@ public class Config
     public bool DockMagnification { get; set; } = true;
     /// <summary>Menu bar with no background at all; off, it is solid white or dark gray.</summary>
     public bool MenuBarTransparent { get; set; } = true;
+    /// <summary>Binance's BTC/USDT price in the menu bar; off, the bar opens no connection to Binance.</summary>
+    public bool ShowBtcTicker { get; set; } = true;
     public bool DockAutoHide { get; set; }
     /// <summary>Slide the auto-hiding dock out and in; off, it disappears and appears at once.</summary>
     public bool DockAutoHideAnimation { get; set; } = true;

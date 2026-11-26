@@ -14,7 +14,7 @@ static class BtcTicker
     public static (decimal Price, decimal Percent)? Latest { get; private set; }
     public static event Action? Changed; // raised on a background thread
 
-    static int started;
+    static CancellationTokenSource? running; // touched from the UI thread only
 
     static BtcTicker()
     {
@@ -25,7 +25,16 @@ static class BtcTicker
 
     public static void Start()
     {
-        if (Interlocked.Exchange(ref started, 1) == 0) _ = Task.Run(Run);
+        if (running != null) return;
+        var source = running = new CancellationTokenSource();
+        _ = Task.Run(() => Run(source.Token));
+    }
+
+    public static void Stop()
+    {
+        running?.Cancel();
+        running = null;
+        Latest = null;
     }
 
     static (decimal, decimal) Parse(string json)
@@ -36,7 +45,7 @@ static class BtcTicker
         return (close, (close - open) / open * 100);
     }
 
-    static async Task Run()
+    static async Task Run(CancellationToken token)
     {
         var buffer = new byte[4096];
         while (true)
@@ -44,11 +53,12 @@ static class BtcTicker
             try
             {
                 using var ws = new ClientWebSocket();
-                await ws.ConnectAsync(new Uri(Url), default);
+                await ws.ConnectAsync(new Uri(Url), token);
                 while (true)
                 {
                     // The server pushes every second, so a silence this long means the connection is dead.
-                    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+                    timeout.CancelAfter(TimeSpan.FromSeconds(15));
                     using var message = new MemoryStream();
                     WebSocketReceiveResult result;
                     do
@@ -62,9 +72,10 @@ static class BtcTicker
                 }
             }
             catch (Exception ex) when (ex is not OutOfMemoryException) { } // offline or dropped: hide the price and reconnect
+            if (token.IsCancellationRequested) return; // Stop already cleared the price
             Latest = null;
             Changed?.Invoke();
-            await Task.Delay(5000);
+            try { await Task.Delay(5000, token); } catch (OperationCanceledException) { return; }
         }
     }
 }
