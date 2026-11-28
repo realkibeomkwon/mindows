@@ -476,7 +476,7 @@ public partial class MenuBarWindow : Window
             var charging = (power.BatteryFlag & 8) != 0 || power.ACLineStatus == 1 && power.BatteryLifePercent >= 100;
             BatteryBolt.Visibility = charging ? Visibility.Visible : Visibility.Collapsed;
             BatteryText.Text = $"{power.BatteryLifePercent}%";
-            BatteryFill.Width = 17 * power.BatteryLifePercent / 100.0;
+            BatteryFill.Width = 18 * power.BatteryLifePercent / 100.0; // the body's inside: 23 wide, less a 1 border and 1.5 padding on each side
             BatteryFill.Background = power.ACLineStatus == 1 ? Brushes.LimeGreen
                 : power.BatteryLifePercent <= 20 ? Brushes.OrangeRed : (Brush)FindResource("BarFg");
         }
