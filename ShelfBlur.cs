@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using Windows.Graphics.Effects;
 using Windows.UI.Composition.Desktop;
@@ -78,8 +79,14 @@ sealed class ShelfBlur
     }
 
     static IntPtr queue;
+    static readonly List<ShelfBlur> all = new();
+    // Minimizing, restoring and foreground changes, Show Desktop's and the hot corner's included, change what lies behind the glass.
+    static readonly WinEventProc windowsChanged = (_, _, _, idObject, _, _, _) => { if (idObject == 0) foreach (var b in all) b.Resample(); };
 
     readonly Window dock;
+    readonly DispatcherTimer resampler = new() { Interval = TimeSpan.FromMilliseconds(30) };
+    long resampleUntil;
+    bool nudged;
     readonly Visual root;
     Comp.Compositor? compositor;
     DesktopWindowTarget? target; // kept alive: the glass goes away with it
@@ -93,6 +100,14 @@ sealed class ShelfBlur
         (this.dock, this.root) = (dock, root);
         dock.IsVisibleChanged += (_, _) => Apply(); // the dock hides itself for full-screen apps and the lock screen
         dock.Closed += (_, _) => DestroyWindow(hwnd);
+        if (all.Count == 0)
+        {
+            SetWinEventHook(3, 3, IntPtr.Zero, windowsChanged, 0, 0, 0); // EVENT_SYSTEM_FOREGROUND, out of context
+            SetWinEventHook(0x16, 0x17, IntPtr.Zero, windowsChanged, 0, 0, 0); // EVENT_SYSTEM_MINIMIZESTART, MINIMIZEEND
+        }
+        all.Add(this);
+        resampler.Tick += (_, _) => Nudge();
+        dock.Closed += (_, _) => { all.Remove(this); resampler.Stop(); };
         UserPreferenceChangedEventHandler onPrefs = (_, _) => dock.Dispatcher.BeginInvoke(Apply);
         SystemEvents.UserPreferenceChanged += onPrefs;
         dock.Closed += (_, _) => SystemEvents.UserPreferenceChanged -= onPrefs;
@@ -114,6 +129,32 @@ sealed class ShelfBlur
         DestroyWindow(hwnd);
         (hwnd, applied) = (IntPtr.Zero, default);
         Apply();
+    }
+
+    /// <summary>
+    /// DWM re-samples the backdrop only when the glass changes shape (magnification refreshes it, an opacity change does not),
+    /// so after windows change behind it the glass grows a pixel every other tick until their animations have settled.
+    /// </summary>
+    void Resample()
+    {
+        resampleUntil = Environment.TickCount64 + 600;
+        resampler.Start();
+    }
+
+    void Nudge()
+    {
+        var settled = Environment.TickCount64 >= resampleUntil;
+        if (settled) resampler.Stop();
+        if (hwnd == IntPtr.Zero || applied.W == 0)
+        {
+            nudged = false;
+            return;
+        }
+        // Grown, not shrunk: the extra pixel stays under the shelf's border instead of opening a gap in the glass.
+        nudged = !nudged && !settled;
+        var h = applied.H + (nudged ? 1 : 0);
+        SetWindowPos(hwnd, IntPtr.Zero, 0, 0, applied.W, h, 2 | SWP_NOZORDER | SWP_NOACTIVATE); // SWP_NOMOVE
+        clip!.Size = new Vector2(applied.W, h);
     }
 
     /// <summary>Follows the shelf, given in the dock's DIPs; also called while the dock slides, so it keeps the last shelf.</summary>
@@ -179,14 +220,5 @@ sealed class ShelfBlur
         clip = compositor.CreateRoundedRectangleGeometry();
         glass.Clip = compositor.CreateGeometricClip(clip);
         target.Root = glass;
-
-        // shortcut: the backdrop seems to be re-sampled only while this tree changes, so an endless imperceptible fade keeps
-        // DWM recomposing the glass; costs a little GPU, replace if the cause turns out to be the z-order against the dock.
-        var fade = compositor.CreateScalarKeyFrameAnimation();
-        fade.InsertKeyFrame(0.5f, 0.999f);
-        fade.InsertKeyFrame(1f, 1f);
-        fade.Duration = TimeSpan.FromSeconds(1);
-        fade.IterationBehavior = Comp.AnimationIterationBehavior.Forever;
-        glass.StartAnimation("Opacity", fade);
     }
 }
