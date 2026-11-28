@@ -530,15 +530,19 @@ public partial class DockWindow : Window
                 // Proportions measured from iOS 26 home-screen badges: height 0.38 of the icon, overhanging its top and right
                 // edges by 0.44 of that height, digits 0.43 of it tall; a wider count stretches the pill to the left.
                 var b = s.Badge!;
-                b.Visibility = s.Count != 0 && s != dragged ? Visibility.Visible : Visibility.Collapsed;
-                var bh = s.Size * 0.38;
-                var text = (TextBlock)b.Child;
-                text.FontSize = bh * 0.62;
-                text.Margin = new Thickness(0, 0, 0, 2 * InkDrop(text) * text.FontSize); // lifts the digits by their drop, so their ink is centred in the circle
-                text.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-                var bw = Math.Max(bh, text.DesiredSize.Width + bh * 0.5);
-                b.CornerRadius = new CornerRadius(bh / 2);
-                Place(b, sx + gap + s.Size - bw + bh * 0.44, Canvas.GetTop(s.Img) - bh * 0.44, bw, bh);
+                b.Visibility = s.Count != 0 && s != dragged && s.Size > 0 ? Visibility.Visible : Visibility.Collapsed;
+                // A pinned icon dragged off the dock collapses to size 0, and WPF rejects a FontSize of 0.
+                if (s.Size > 0)
+                {
+                    var bh = s.Size * 0.38;
+                    var text = (TextBlock)b.Child;
+                    text.FontSize = bh * 0.62;
+                    text.Margin = new Thickness(0, 0, 0, 2 * InkDrop(text) * text.FontSize); // lifts the digits by their drop, so their ink is centred in the circle
+                    text.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    var bw = Math.Max(bh, text.DesiredSize.Width + bh * 0.5);
+                    b.CornerRadius = new CornerRadius(bh / 2);
+                    Place(b, sx + gap + s.Size - bw + bh * 0.44, Canvas.GetTop(s.Img) - bh * 0.44, bw, bh);
+                }
             }
             x += SlotWidth(s);
         }
